@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>가계부 자동차/카드대금 임원 보고서</title>
+  <style>
+    :root { --surface:#fcfcfd; --ink:#1f2430; --muted:#626b7f; --grid:#e5e8f0; --blue:#2e4780; --gold:#b8a037; --green:#3f7d5a; --red:#a84f4f; }
+    body { margin:0; background:var(--surface); color:var(--ink); font-family:"Segoe UI","Noto Sans KR",Arial,sans-serif; line-height:1.55; }
+    main { max-width:1120px; margin:0 auto; padding:48px 40px 64px; }
+    h1 { font-size:44px; line-height:1.15; margin:0 0 12px; letter-spacing:0; }
+    .subtitle { color:var(--muted); font-size:18px; margin:0 0 32px; }
+    h2 { font-size:28px; margin:44px 0 14px; letter-spacing:0; }
+    p, li { font-size:17px; }
+    .metric-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin:24px 0 20px; }
+    .metric-card { border:1px solid var(--grid); border-radius:8px; padding:16px; background:#fff; }
+    .metric-card .label { color:var(--muted); font-size:14px; margin-bottom:6px; }
+    .metric-card .value { font-size:25px; font-weight:700; }
+    .metric-card .note { color:var(--muted); font-size:13px; margin-top:4px; }
+    .chart { margin:16px 0 24px; border:1px solid var(--grid); border-radius:8px; background:#fff; padding:14px; }
+    svg { width:100%; height:auto; display:block; }
+    table { width:100%; border-collapse:collapse; margin:16px 0 24px; background:#fff; border:1px solid var(--grid); font-size:14px; }
+    th, td { padding:9px 10px; border-bottom:1px solid var(--grid); text-align:right; white-space:nowrap; }
+    th:first-child, td:first-child { text-align:left; }
+    th { background:#f3f5f9; font-weight:650; }
+    .source-note { color:var(--muted); font-size:14px; }
+    .caveat { border-left:4px solid var(--gold); padding:10px 14px; background:#fffaf0; margin:18px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>가계부 자동차/카드대금 임원 보고서</h1>
+  <p class="subtitle">202507-202607 가계부, 2025-07부터 2026-07까지의 월별 지출 흐름. 금액 단위는 원(KRW).</p>
+  <section>
+    <h2>Executive Summary</h2>
+    <ul>
+      <li><strong>자동차 관련 반복 지출은 통행료가 주유비에 근접하거나 일부 월에는 더 큽니다.</strong> 전체 기간 주유비는 2,956,440원, 하이패스 통행료는 2,043,400원입니다.</li>
+      <li><strong>2026-06은 통행료가 319,420원으로 기간 내 최고치입니다.</strong> 같은 달 주유비도 312,600원으로 높아 자동차 이동 비용이 동시에 커졌습니다.</li>
+      <li><strong>카드대금은 변형 표기 반영 후 총 34,426,639원입니다.</strong> 하나카드결제와 삼성카드(주)를 각각 하나카드/삼성카드로 재분류했으며, 2025-09이 4,798,345원으로 가장 큽니다.</li>
+      <li><strong>분류 기준상 일부 주유소명은 통행료 키워드와 겹칩니다.</strong> 내용에 “고속도로”가 들어간 주유소는 주유비와 통행료 규칙이 동시에 걸릴 수 있어 17건을 caveat로 표시했습니다.</li>
+    </ul>
+  </section>
+  <section>
+    <h2>Topline Metrics</h2>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="label">집계 기간</div><div class="value">2025-07 ~ 2026-07</div><div class="note">원본 2,030행</div></div>
+      <div class="metric-card"><div class="label">총 주유비</div><div class="value">2,956,440원</div><div class="note">69건</div></div>
+      <div class="metric-card"><div class="label">총 하이패스 통행료</div><div class="value">2,043,400원</div><div class="note">600건</div></div>
+      <div class="metric-card"><div class="label">총 카드대금</div><div class="value">34,426,639원</div><div class="note">37건</div></div>
+    </div>
+  </section>
+  <section>
+    <h2>Fuel spending rose into spring 2026 before dropping in the partial July month</h2>
+    <p>주유비는 2026-04에 390,000원으로 정점을 찍었고, 2026-06에도 312,600원으로 높은 수준을 유지했습니다. 2026-07은 7월 2일까지의 부분월이라 비교 시 낮게 보아야 합니다.</p>
+    <figure class="chart"><figcaption>월별 주유비, 원(KRW)</figcaption>
+      <svg viewBox="0 0 940 430" role="img" aria-label="fuel 월별 막대 차트">
+        <line x1="70" y1="360" x2="900" y2="360" stroke="#d7dbe7"/>
+        <line x1="70" y1="60" x2="70" y2="360" stroke="#d7dbe7"/>
+        <text x="18" y="64" font-size="12" fill="#626b7f">400k</text>
+        <text x="18" y="214" font-size="12" fill="#626b7f">200k</text>
+        <text x="37" y="364" font-size="12" fill="#626b7f">0</text>
+        <g><rect x="84" y="225.00" width="43" height="135.00" fill="#2e4780"/><rect x="147" y="247.50" width="43" height="112.50" fill="#2e4780"/><rect x="210" y="202.50" width="43" height="157.50" fill="#2e4780"/><rect x="273" y="165.00" width="43" height="195.00" fill="#2e4780"/><rect x="336" y="172.50" width="43" height="187.50" fill="#2e4780"/><rect x="399" y="270.00" width="43" height="90.00" fill="#2e4780"/><rect x="462" y="135.00" width="43" height="225.00" fill="#2e4780"/><rect x="525" y="187.62" width="43" height="172.38" fill="#2e4780"/><rect x="588" y="168.00" width="43" height="192.00" fill="#2e4780"/><rect x="651" y="67.50" width="43" height="292.50" fill="#2e4780"/><rect x="714" y="166.50" width="43" height="193.50" fill="#2e4780"/><rect x="777" y="125.55" width="43" height="234.45" fill="#2e4780"/><rect x="840" y="330.00" width="43" height="30.00" fill="#2e4780"/></g>
+        <g fill="#1f2430" font-size="11" text-anchor="middle"><text x="105.5" y="383">25-07</text><text x="168.5" y="383">08</text><text x="231.5" y="383">09</text><text x="294.5" y="383">10</text><text x="357.5" y="383">11</text><text x="420.5" y="383">12</text><text x="483.5" y="383">26-01</text><text x="546.5" y="383">02</text><text x="609.5" y="383">03</text><text x="672.5" y="383">04</text><text x="735.5" y="383">05</text><text x="798.5" y="383">06</text><text x="861.5" y="383">26-07</text></g>
+      </svg></figure>
+  </section>
+  <section>
+    <h2>Toll spend peaked in June and should be monitored separately from fuel</h2>
+    <p>하이패스 통행료는 월별 건수가 많고 금액 변동도 독립적입니다. 2026-06 통행료는 319,420원으로 가장 높아, 주유비와 합산하지 않고 별도 관리 지표로 보는 것이 적절합니다.</p>
+    <figure class="chart"><figcaption>월별 하이패스 통행료, 원(KRW)</figcaption>
+      <svg viewBox="0 0 940 430" role="img" aria-label="toll 월별 막대 차트">
+        <line x1="70" y1="360" x2="900" y2="360" stroke="#d7dbe7"/>
+        <line x1="70" y1="60" x2="70" y2="360" stroke="#d7dbe7"/>
+        <text x="18" y="64" font-size="12" fill="#626b7f">320k</text>
+        <text x="18" y="214" font-size="12" fill="#626b7f">160k</text>
+        <text x="37" y="364" font-size="12" fill="#626b7f">0</text>
+        <g><rect x="84" y="201.66" width="43" height="158.34" fill="#b8a037"/><rect x="147" y="259.03" width="43" height="100.97" fill="#b8a037"/><rect x="210" y="256.33" width="43" height="103.67" fill="#b8a037"/><rect x="273" y="224.93" width="43" height="135.07" fill="#b8a037"/><rect x="336" y="237.49" width="43" height="122.51" fill="#b8a037"/><rect x="399" y="286.95" width="43" height="73.05" fill="#b8a037"/><rect x="462" y="150.08" width="43" height="209.92" fill="#b8a037"/><rect x="525" y="266.87" width="43" height="93.13" fill="#b8a037"/><rect x="588" y="142.24" width="43" height="217.76" fill="#b8a037"/><rect x="651" y="142.93" width="43" height="217.07" fill="#b8a037"/><rect x="714" y="181.56" width="43" height="178.44" fill="#b8a037"/><rect x="777" y="60.54" width="43" height="299.46" fill="#b8a037"/><rect x="840" y="353.72" width="43" height="6.28" fill="#b8a037"/></g>
+        <g fill="#1f2430" font-size="11" text-anchor="middle"><text x="105.5" y="383">25-07</text><text x="168.5" y="383">08</text><text x="231.5" y="383">09</text><text x="294.5" y="383">10</text><text x="357.5" y="383">11</text><text x="420.5" y="383">12</text><text x="483.5" y="383">26-01</text><text x="546.5" y="383">02</text><text x="609.5" y="383">03</text><text x="672.5" y="383">04</text><text x="735.5" y="383">05</text><text x="798.5" y="383">06</text><text x="861.5" y="383">26-07</text></g>
+      </svg></figure>
+  </section>
+  <section>
+    <h2>Card payments increase materially after mapping variant merchant names</h2>
+    <p>하나카드결제 8건과 삼성카드(주) 4건을 카드대금으로 반영했습니다. 이 변경으로 2025-08, 2025-10~2026-05의 카드대금 흐름이 기존 보고서보다 커졌습니다.</p>
+    <figure class="chart"><figcaption>월별 신용카드 청구사별 카드대금, 원(KRW)</figcaption>
+      <svg viewBox="0 0 940 430" role="img" aria-label="월별 카드대금 누적 막대 차트">
+        <line x1="70" y1="360" x2="900" y2="360" stroke="#d7dbe7"/>
+        <line x1="70" y1="60" x2="70" y2="360" stroke="#d7dbe7"/>
+        <text x="18" y="64" font-size="12" fill="#626b7f">4.0M</text>
+        <text x="18" y="214" font-size="12" fill="#626b7f">2.0M</text>
+        <text x="37" y="364" font-size="12" fill="#626b7f">0</text>
+        <g><rect x="84" y="240.47" width="43" height="119.53" fill="#3f7d5a"/><rect x="84" y="64.98" width="43" height="175.50" fill="#2e4780"/><rect x="84" y="63.33" width="43" height="1.65" fill="#a84f4f"/><rect x="147" y="263.37" width="43" height="96.63" fill="#3f7d5a"/><rect x="147" y="100.48" width="43" height="162.89" fill="#2e4780"/><rect x="147" y="98.80" width="43" height="1.67" fill="#a84f4f"/><rect x="210" y="199.89" width="43" height="160.11" fill="#3f7d5a"/><rect x="210" y="13.88" width="43" height="186.00" fill="#2e4780"/><rect x="210" y="0.12" width="43" height="13.76" fill="#a84f4f"/><rect x="273" y="255.97" width="43" height="104.03" fill="#3f7d5a"/><rect x="273" y="214.65" width="43" height="41.32" fill="#2e4780"/><rect x="273" y="212.98" width="43" height="1.67" fill="#a84f4f"/><rect x="336" y="238.61" width="43" height="121.39" fill="#3f7d5a"/><rect x="336" y="179.05" width="43" height="59.56" fill="#2e4780"/><rect x="336" y="177.37" width="43" height="1.67" fill="#a84f4f"/><rect x="399" y="228.78" width="43" height="131.22" fill="#3f7d5a"/><rect x="399" y="116.92" width="43" height="111.86" fill="#2e4780"/><rect x="399" y="97.83" width="43" height="19.09" fill="#a84f4f"/><rect x="462" y="259.22" width="43" height="100.78" fill="#3f7d5a"/><rect x="462" y="171.84" width="43" height="87.38" fill="#2e4780"/><rect x="462" y="167.24" width="43" height="4.60" fill="#a84f4f"/><rect x="525" y="255.52" width="43" height="104.48" fill="#3f7d5a"/><rect x="525" y="195.40" width="43" height="60.12" fill="#2e4780"/><rect x="525" y="193.72" width="43" height="1.67" fill="#a84f4f"/><rect x="588" y="286.33" width="43" height="73.67" fill="#3f7d5a"/><rect x="588" y="194.91" width="43" height="91.42" fill="#2e4780"/><rect x="588" y="193.24" width="43" height="1.67" fill="#a84f4f"/><rect x="651" y="288.68" width="43" height="71.32" fill="#3f7d5a"/><rect x="651" y="264.36" width="43" height="24.32" fill="#2e4780"/><rect x="651" y="235.83" width="43" height="28.52" fill="#a84f4f"/><rect x="714" y="314.84" width="43" height="45.16" fill="#3f7d5a"/><rect x="714" y="258.20" width="43" height="56.64" fill="#2e4780"/><rect x="714" y="154.86" width="43" height="103.34" fill="#a84f4f"/><rect x="777" y="298.48" width="43" height="61.52" fill="#3f7d5a"/><rect x="777" y="247.51" width="43" height="50.96" fill="#2e4780"/><rect x="777" y="142.67" width="43" height="104.84" fill="#a84f4f"/></g>
+        <g fill="#1f2430" font-size="11" text-anchor="middle"><text x="105.5" y="383">25-07</text><text x="168.5" y="383">08</text><text x="231.5" y="383">09</text><text x="294.5" y="383">10</text><text x="357.5" y="383">11</text><text x="420.5" y="383">12</text><text x="483.5" y="383">26-01</text><text x="546.5" y="383">02</text><text x="609.5" y="383">03</text><text x="672.5" y="383">04</text><text x="735.5" y="383">05</text><text x="798.5" y="383">06</text><text x="861.5" y="383">26-07</text></g>
+        <g font-size="13">
+          <rect x="690" y="50" width="12" height="12" fill="#3f7d5a"/><text x="708" y="61">하나카드</text>
+          <rect x="780" y="50" width="12" height="12" fill="#2e4780"/><text x="798" y="61">현대카드</text>
+          <rect x="870" y="50" width="12" height="12" fill="#a84f4f"/><text x="888" y="61">삼성카드</text>
+        </g>
+      </svg></figure>
+  </section>
+  <section>
+    <h2>Monthly audit table</h2>
+    <p>아래 표는 대시보드와 슬라이드의 모든 핵심 수치를 동일한 월별 집계에서 확인할 수 있게 정리한 것입니다.</p>
+    <table><thead><tr><th>월</th><th>주유비</th><th>하이패스</th><th>카드대금 합계</th><th>하나카드</th><th>현대카드</th><th>삼성카드</th></tr></thead><tbody>
+      <tr><td>2025-07</td><td>180,000</td><td>168,900</td><td>3,955,664</td><td>1,593,678</td><td>2,339,986</td><td>22,000</td></tr>
+<tr><td>2025-08</td><td>150,000</td><td>107,700</td><td>3,482,631</td><td>1,288,421</td><td>2,171,910</td><td>22,300</td></tr>
+<tr><td>2025-09</td><td>210,000</td><td>110,580</td><td>4,798,345</td><td>2,134,864</td><td>2,480,041</td><td>183,440</td></tr>
+<tr><td>2025-10</td><td>260,000</td><td>144,080</td><td>1,960,235</td><td>1,387,016</td><td>550,919</td><td>22,300</td></tr>
+<tr><td>2025-11</td><td>250,000</td><td>130,680</td><td>2,435,002</td><td>1,618,566</td><td>794,136</td><td>22,300</td></tr>
+<tr><td>2025-12</td><td>120,000</td><td>77,920</td><td>3,495,612</td><td>1,749,559</td><td>1,491,473</td><td>254,580</td></tr>
+<tr><td>2026-01</td><td>300,000</td><td>223,920</td><td>2,570,164</td><td>1,343,753</td><td>1,165,111</td><td>61,300</td></tr>
+<tr><td>2026-02</td><td>229,840</td><td>99,340</td><td>2,217,022</td><td>1,393,101</td><td>801,621</td><td>22,300</td></tr>
+<tr><td>2026-03</td><td>256,000</td><td>232,280</td><td>2,223,500</td><td>982,262</td><td>1,218,938</td><td>22,300</td></tr>
+<tr><td>2026-04</td><td>390,000</td><td>231,540</td><td>1,655,536</td><td>950,910</td><td>324,326</td><td>380,300</td></tr>
+<tr><td>2026-05</td><td>258,000</td><td>190,340</td><td>2,735,202</td><td>602,160</td><td>755,142</td><td>1,377,900</td></tr>
+<tr><td>2026-06</td><td>312,600</td><td>319,420</td><td>2,897,726</td><td>820,328</td><td>679,498</td><td>1,397,900</td></tr>
+<tr><td>2026-07</td><td>40,000</td><td>6,700</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+    </tbody></table>
+  </section>
+  <section>
+    <h2>Caveats And Assumptions</h2>
+    <div class="caveat"><p><strong>분류 중복 가능성:</strong> 주유비와 통행료 규칙이 동시에 걸린 행은 17건입니다. 내용에 “고속도로”가 들어간 주유소명은 주유비 키워드와 통행료 키워드가 동시에 적용될 수 있습니다.</p></div>
+    <ul>
+      <li>금액은 원(KRW)이며, 지출/이체의 음수 금액만 비용으로 반영하고 절댓값으로 표시했습니다.</li>
+      <li>카드대금은 청구사 납부액 기준입니다. 내용 열의 `하나카드/하나카드결제`, `현대카드`, `삼성카드/삼성카드(주)`를 각각 하나카드, 현대카드, 삼성카드로 매핑했습니다.</li>
+      <li>2026-07은 2026-07-02까지의 부분월입니다.</li>
+      <li>날짜 파싱 실패 0건, 금액 파싱 실패 0건, KRW 외 통화 0건입니다.</li>
+    </ul>
+  </section>
+  <section>
+    <h2>Sources And Reproducibility</h2>
+    <p class="source-note">Source Google Sheet: <a href="https://docs.google.com/spreadsheets/d/1Qx9rdFlCteVn3vudJ1aJ0IMH8KpF01YtTksyN4fgkX0/edit">202507-202607 가계부 / 시트1!A:J</a>. Local CSV export: 202507-202607 가계부.CSV.csv. Dashboard app artifact: <a href="https://mcp-server-dataanalyticswidgets-d90d6b74b2c37858.web-sandbox.oaiusercontent.com/?app=skybridge">skybridge dashboard app</a>. Generated at: 2026-07-02T12:00:00+09:00.</p>
+    <p class="source-note">주유비 규칙: `타입=지출`, `대분류=자동차`, `내용`에 주유소/에너지/오일뱅크/석유/주유 포함. 통행료 규칙: 하이패스 결제수단 또는 내용에 대교/고속도로/브릿지/브리지/도로 포함. 카드대금 규칙: 내용 열의 하나카드/하나카드결제/현대카드/삼성카드/삼성카드(주) 매핑.</p>
+  </section>
+</main>
+</body>
+</html>

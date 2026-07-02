@@ -1,0 +1,1931 @@
+import csv
+import json
+import os
+from pathlib import Path
+
+# Paths
+ROOT = Path(__file__).resolve().parent
+CSV_PATH = ROOT / "202507-202607 가계부.CSV.csv"
+OUT_PATH = ROOT / "가계부_대시보드.html"
+
+# Category rules (matching original script definitions for compatibility)
+FUEL_KEYWORDS = ("주유소", "에너지", "오일뱅크", "석유", "주유")
+TOLL_KEYWORDS = ("대교", "고속도로", "브릿지", "브리지", "도로")
+TOLL_PAYMENT_METHOD = "현대카드ZERO Edition2 포인트형 하이패스"
+CARD_ISSUER_BY_CONTENT = {
+    "하나카드": "하나카드",
+    "하나카드결제": "하나카드",
+    "현대카드": "현대카드",
+    "삼성카드": "삼성카드",
+    "삼성카드(주)": "삼성카드",
+}
+
+def parse_amount(value):
+    if value is None or value == "":
+        return 0.0
+    return float(str(value).replace(",", ""))
+
+def main():
+    if not CSV_PATH.exists():
+        print(f"Error: CSV file not found at {CSV_PATH}")
+        return
+
+    # Read CSV
+    transactions = []
+    with open(CSV_PATH, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            raw_amount = parse_amount(row.get("금액", "0"))
+            # Standardize transaction row
+            tx = {
+                "date": row.get("날짜", ""),
+                "time": row.get("시간", ""),
+                "type": row.get("타입", ""),
+                "category": row.get("대분류", "미분류"),
+                "subcategory": row.get("소분류", "미분류"),
+                "content": row.get("내용", ""),
+                "amount": raw_amount,
+                "currency": row.get("화폐", "KRW"),
+                "payment": row.get("결제수단", ""),
+                "memo": row.get("메모", "")
+            }
+            transactions.append(tx)
+
+    # Sort transactions by date descending, then time descending
+    transactions.sort(key=lambda x: (x["date"], x["time"]), reverse=True)
+
+    # Convert to JSON for injection
+    tx_json = json.dumps(transactions, ensure_ascii=False)
+    fuel_kw_json = json.dumps(FUEL_KEYWORDS, ensure_ascii=False)
+    toll_kw_json = json.dumps(TOLL_KEYWORDS, ensure_ascii=False)
+    card_iss_json = json.dumps(CARD_ISSUER_BY_CONTENT, ensure_ascii=False)
+
+    # HTML Template
+    html_template = """<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>가계부 인텔리전트 대시보드</title>
+  <!-- Google Fonts: Inter & Outfit & Noto Sans KR -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- PapaParse CDN for Dynamic CSV Parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #111827;
+      --bg-glass: rgba(17, 24, 39, 0.7);
+      --bg-glass-hover: rgba(31, 41, 55, 0.8);
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --border-glass-bright: rgba(255, 255, 255, 0.15);
+      
+      --text-primary: #f3f4f6;
+      --text-secondary: #9ca3af;
+      --text-muted: #6b7280;
+      
+      --color-income: #10b981;
+      --color-income-bg: rgba(16, 185, 129, 0.15);
+      --color-expense: #ef4444;
+      --color-expense-bg: rgba(239, 68, 68, 0.15);
+      --color-transfer: #3b82f6;
+      --color-transfer-bg: rgba(59, 130, 246, 0.15);
+      
+      --theme-purple: #8b5cf6;
+      --theme-blue: #3b82f6;
+      --theme-indigo: #6366f1;
+      --theme-emerald: #10b981;
+      --theme-amber: #f59e0b;
+      --theme-pink: #ec4899;
+      
+      --font-display: 'Outfit', 'Inter', 'Noto Sans KR', sans-serif;
+      --font-body: 'Inter', 'Noto Sans KR', sans-serif;
+      
+      --shadow-premium: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      --shadow-glow-purple: 0 0 20px rgba(139, 92, 246, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-glass) var(--bg-primary);
+    }
+
+    /* Custom scrollbar */
+    *::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    *::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+    *::-webkit-scrollbar-thumb {
+      background-color: var(--border-glass);
+      border-radius: 3px;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.08) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    /* App container layout */
+    .app-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px 16px 80px 16px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border-glass);
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .logo-container {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logo-title {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a78bfa 0%, #3b82f6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    /* Interactive Buttons */
+    .btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid transparent;
+      font-family: var(--font-body);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--theme-purple) 0%, var(--theme-indigo) 100%);
+      color: white;
+      box-shadow: var(--shadow-glow-purple);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.1);
+      box-shadow: 0 0 25px rgba(139, 92, 246, 0.4);
+    }
+
+    .btn-secondary {
+      background: var(--bg-glass);
+      color: var(--text-primary);
+      border-color: var(--border-glass);
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-glass-hover);
+      border-color: var(--border-glass-bright);
+    }
+
+    /* Hidden File Input */
+    #file-input {
+      display: none;
+    }
+
+    /* Navigation Tabs */
+    .nav-tabs {
+      display: flex;
+      background: var(--bg-glass);
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid var(--border-glass);
+      margin-bottom: 24px;
+      overflow-x: auto;
+      white-space: nowrap;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .tab-btn.active {
+      color: white;
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+      font-weight: 600;
+    }
+
+    /* Glass Cards */
+    .card {
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: var(--shadow-premium);
+      transition: border-color 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: var(--border-glass-bright);
+    }
+
+    /* KPI Grid Layout */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .kpi-card {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi-card::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: transparent;
+    }
+
+    .kpi-card.income::after { background: var(--color-income); }
+    .kpi-card.expense::after { background: var(--color-expense); }
+    .kpi-card.net::after { background: var(--theme-blue); }
+    .kpi-card.savings::after { background: var(--theme-amber); }
+
+    .kpi-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .kpi-value {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      margin: 12px 0 4px 0;
+    }
+
+    .kpi-note {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Main Content Sections */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.4s ease-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Grid Layouts for Tabs */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 1024px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: var(--text-primary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 350px;
+    }
+
+    /* Lists and Lists Styling */
+    .data-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 350px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-glass);
+      border-radius: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .list-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-glass-bright);
+      transform: translateX(2px);
+    }
+
+    .item-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .item-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .item-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .item-val-container {
+      text-align: right;
+    }
+
+    .item-value {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .item-value.expense { color: #fda4af; }
+    .item-value.income { color: #6ee7b7; }
+
+    .item-percentage {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Transaction Table Styles */
+    .filter-panel {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      background: rgba(255, 255, 255, 0.01);
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border-glass);
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 150px;
+    }
+
+    .filter-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-control {
+      background: rgba(17, 24, 39, 0.8);
+      border: 1px solid var(--border-glass);
+      color: var(--text-primary);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: var(--font-body);
+      outline: none;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+
+    .form-control:focus {
+      border-color: var(--theme-purple);
+      box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+    }
+
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin-top: 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border-glass);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(17, 24, 39, 0.9);
+      padding: 14px 16px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-glass);
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.2s ease;
+    }
+
+    th:hover {
+      color: var(--text-primary);
+    }
+
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-glass);
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .badge-income {
+      background: var(--color-income-bg);
+      color: #34d399;
+    }
+
+    .badge-expense {
+      background: var(--color-expense-bg);
+      color: #f87171;
+    }
+
+    .badge-transfer {
+      background: var(--color-transfer-bg);
+      color: #60a5fa;
+    }
+
+    .badge-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-glass);
+    }
+
+    /* Pagination controls */
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .page-info {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .page-controls {
+      display: flex;
+      gap: 6px;
+    }
+
+    .page-btn {
+      padding: 8px 14px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      color: var(--text-primary);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .page-btn:hover:not(:disabled) {
+      background: var(--bg-glass-hover);
+      border-color: var(--border-glass-bright);
+    }
+
+    .page-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Modal / Alert for file drag drop */
+    .upload-zone {
+      border: 2px dashed var(--border-glass);
+      border-radius: 12px;
+      padding: 32px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.01);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 24px;
+    }
+
+    .upload-zone.dragover, .upload-zone:hover {
+      border-color: var(--theme-purple);
+      background: rgba(139, 92, 246, 0.03);
+    }
+
+    .upload-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+      display: inline-block;
+    }
+
+    .upload-icon-small {
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    /* Audit-specific grids */
+    .audit-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .audit-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .audit-summary-box {
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 12px;
+      border: 1px solid var(--border-glass);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .audit-summary-box h3 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .audit-summary-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .audit-summary-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+    }
+
+    .audit-summary-item .label {
+      color: var(--text-secondary);
+    }
+
+    .audit-summary-item .val {
+      font-weight: 600;
+      font-family: var(--font-display);
+    }
+
+    .audit-note-box {
+      background: rgba(245, 158, 11, 0.07);
+      border-left: 4px solid var(--theme-amber);
+      padding: 14px;
+      border-radius: 0 8px 8px 0;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #fde047;
+      margin-top: 16px;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 600px) {
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .nav-tabs {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <header>
+      <div class="logo-container">
+        <span class="logo-title">가계부 인텔리전트 대시보드</span>
+        <span class="logo-subtitle">월별 분석, 지출 탐색 및 자동차/카드대금 감사 대시보드</span>
+      </div>
+      <div class="header-actions">
+        <label for="file-input" class="btn btn-secondary">
+          <span class="upload-icon-small">📁</span> CSV 파일 업로드
+        </label>
+        <input type="file" id="file-input" accept=".csv" />
+        <button class="btn btn-primary" onclick="resetToDefaultData()">🔄 기본 데이터 복원</button>
+      </div>
+    </header>
+
+    <!-- File Drop Zone (visible only when requesting upload or collapsed) -->
+    <div id="drop-zone" class="upload-zone" style="display:none;">
+      <span class="upload-icon">📥</span>
+      <h3>여기에 가계부 CSV 파일을 드래그하거나 클릭하여 로드하세요</h3>
+      <p style="font-size:12px; color:var(--text-secondary); margin-top:6px;">기본 데이터는 파이썬에서 빌드한 2025-07 ~ 2026-07 내역입니다.</p>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('overview')">📊 대시보드 개요</button>
+      <button class="tab-btn" onclick="switchTab('fuel')">⛽ 월별 주유비</button>
+      <button class="tab-btn" onclick="switchTab('toll')">🛣️ 월별 하이패스</button>
+      <button class="tab-btn" onclick="switchTab('card')">💳 신용카드 대금</button>
+      <button class="tab-btn" onclick="switchTab('category')">🏷️ 카테고리 분석</button>
+      <button class="tab-btn" onclick="switchTab('explorer')">🔎 전체거래 내역</button>
+    </nav>
+
+    <!-- KPI Blocks -->
+    <div class="kpi-grid">
+      <div class="kpi-card card income">
+        <span class="kpi-label">총 수입</span>
+        <span class="kpi-value" id="kpi-income">0원</span>
+        <span class="kpi-note" id="kpi-income-note">수입 타입 거래 합계</span>
+      </div>
+      <div class="kpi-card card expense">
+        <span class="kpi-label">총 지출</span>
+        <span class="kpi-value" id="kpi-expense">0원</span>
+        <span class="kpi-note" id="kpi-expense-note">지출 타입 거래 합계</span>
+      </div>
+      <div class="kpi-card card net">
+        <span class="kpi-label">순수입 (Net)</span>
+        <span class="kpi-value" id="kpi-net">0원</span>
+        <span class="kpi-note" id="kpi-net-note">수입 - 지출</span>
+      </div>
+      <div class="kpi-card card savings">
+        <span class="kpi-label">저축률 (Savings Rate)</span>
+        <span class="kpi-value" id="kpi-savings">0%</span>
+        <span class="kpi-note" id="kpi-savings-note">순수입 / 총수입</span>
+      </div>
+    </div>
+
+    <!-- Tab Contents -->
+    
+    <!-- Tab 1: Overview -->
+    <div id="tab-overview" class="tab-content active">
+      <div class="dashboard-grid">
+        <div class="card">
+          <div class="section-title">
+            <span>월별 수입/지출 추이</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-monthly-trend"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title">
+            <span>월별 지출 순위</span>
+          </div>
+          <div class="data-list" id="list-monthly-expenses">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Fuel -->
+    <div id="tab-fuel" class="tab-content">
+      <div class="audit-grid">
+        <div class="card">
+          <div class="section-title">
+            <span>월별 주유비 추이</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-fuel"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title">
+            <span>주유비 분석 요약</span>
+          </div>
+          <div class="audit-summary-box">
+            <h3>⛽ 주유비 Key Stats</h3>
+            <div class="audit-summary-list">
+              <div class="audit-summary-item">
+                <span class="label">총 주유 금액</span>
+                <span class="val" id="fuel-total">0원</span>
+              </div>
+              <div class="audit-summary-item">
+                <span class="label">총 주유 횟수</span>
+                <span class="val" id="fuel-count">0건</span>
+              </div>
+              <div class="audit-summary-item">
+                <span class="label">월평균 주유 금액</span>
+                <span class="val" id="fuel-monthly-avg">0원</span>
+              </div>
+              <div class="audit-summary-item">
+                <span class="label">최대 지출 월</span>
+                <span class="val" id="fuel-peak-month">-</span>
+              </div>
+            </div>
+          </div>
+          <div class="section-title" style="margin-top:20px;">
+            <span>최근 주유 지출 내역</span>
+          </div>
+          <div class="data-list" id="list-fuel-details" style="max-height: 200px;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Toll -->
+    <div id="tab-toll" class="tab-content">
+      <div class="audit-grid">
+        <div class="card">
+          <div class="section-title">
+            <span>월별 하이패스 통행료 추이</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-toll"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title">
+            <span>하이패스 통행료 분석 요약</span>
+          </div>
+          <div class="audit-summary-box">
+            <h3>🛣️ 하이패스 Key Stats</h3>
+            <div class="audit-summary-list">
+              <div class="audit-summary-item">
+                <span class="label">총 통행료 금액</span>
+                <span class="val" id="toll-total">0원</span>
+              </div>
+              <div class="audit-summary-item">
+                <span class="label">총 통행료 건수</span>
+                <span class="val" id="toll-count">0건</span>
+              </div>
+              <div class="audit-summary-item">
+                <span class="label">월평균 통행료 금액</span>
+                <span class="val" id="toll-monthly-avg">0원</span>
+              </div>
+              <div class="audit-summary-item">
+                <span class="label">최대 지출 월</span>
+                <span class="val" id="toll-peak-month">-</span>
+              </div>
+            </div>
+            <div class="audit-note-box">
+              <strong>⚠️ 중복 분류 정보 (Caveat):</strong> 내용에 "고속도로"가 들어간 일부 주유소는 주유비 키워드와 통행료 키워드가 동시에 작동하여 중복될 수 있습니다. 대시보드는 이를 방지하기 위해 주유비 필터와 통행료 필터를 별도로 엄격히 상호배제하여 적용하고 있습니다.
+            </div>
+          </div>
+          <div class="section-title" style="margin-top:20px;">
+            <span>최근 통행료 지출 내역</span>
+          </div>
+          <div class="data-list" id="list-toll-details" style="max-height: 180px;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Card -->
+    <div id="tab-card" class="tab-content">
+      <div class="audit-grid">
+        <div class="card">
+          <div class="section-title">
+            <span>월별 카드 대금 납부 추이</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-card"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title">
+            <span>카드대금 분석 요약</span>
+          </div>
+          <div class="audit-summary-box">
+            <h3>💳 청구사별 총 청구 금액</h3>
+            <div class="audit-summary-list">
+              <div class="audit-summary-item">
+                <span class="label">총 청구 금액</span>
+                <span class="val" id="card-total">0원</span>
+              </div>
+              <div class="audit-summary-item">
+                <span class="label">하나카드 누적</span>
+                <span class="val" style="color:#6ee7b7" id="card-hana">0원</span>
+              </div>
+              <div class="audit-summary-item">
+                <span class="label">현대카드 누적</span>
+                <span class="val" style="color:#60a5fa" id="card-hyundai">0원</span>
+              </div>
+              <div class="audit-summary-item">
+                <span class="label">삼성카드 누적</span>
+                <span class="val" style="color:#fca5a5" id="card-samsung">0원</span>
+              </div>
+            </div>
+            <div class="audit-note-box" style="background: rgba(59, 130, 246, 0.07); border-left-color: var(--theme-blue); color: #93c5fd;">
+              <strong>ℹ️ 카드대금 매핑 로직:</strong> 내용 열에 표시된 결제 주체명이 `하나카드/하나카드결제` -> 하나카드, `현대카드` -> 현대카드, `삼성카드/삼성카드(주)` -> 삼성카드로 변형 표기를 표준화하여 반영했습니다.
+            </div>
+          </div>
+          <div class="section-title" style="margin-top:20px;">
+            <span>최근 카드 대금 내역</span>
+          </div>
+          <div class="data-list" id="list-card-details" style="max-height: 180px;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 5: Category -->
+    <div id="tab-category" class="tab-content">
+      <div class="dashboard-grid">
+        <div class="card">
+          <div class="section-title">
+            <span>지출 대분류 비율</span>
+          </div>
+          <div class="chart-container" style="height: 380px; display:flex; justify-content:center; align-items:center;">
+            <canvas id="chart-category" style="max-height:350px; max-width:350px;"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title">
+            <span id="category-detail-title">카테고리별 상세</span>
+          </div>
+          <div class="data-list" id="list-category-breakdown" style="max-height: 380px;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 6: Explorer -->
+    <div id="tab-explorer" class="tab-content">
+      <div class="card">
+        <div class="section-title">
+          <span>가계부 거래 내역 탐색기</span>
+        </div>
+        
+        <!-- Filter Panel -->
+        <div class="filter-panel">
+          <div class="filter-group">
+            <span class="filter-label">검색어</span>
+            <input type="text" id="filter-search" class="form-control" placeholder="내용, 메모 검색..." oninput="applyFilters()" />
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">거래 구분</span>
+            <select id="filter-type" class="form-control" onchange="applyFilters()">
+              <option value="ALL">전체 보기</option>
+              <option value="지출">지출</option>
+              <option value="수입">수입</option>
+              <option value="이체">이체</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">대분류</span>
+            <select id="filter-category" class="form-control" onchange="applyFilters()">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">월별 선택</span>
+            <select id="filter-month" class="form-control" onchange="applyFilters()">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">결제 수단</span>
+            <select id="filter-payment" class="form-control" onchange="applyFilters()">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+          <table id="transactions-table">
+            <thead>
+              <tr>
+                <th onclick="toggleSort('date')">날짜 ↕</th>
+                <th>시간</th>
+                <th onclick="toggleSort('type')">타입 ↕</th>
+                <th onclick="toggleSort('category')">대분류 ↕</th>
+                <th>소분류</th>
+                <th>내용</th>
+                <th onclick="toggleSort('amount')" style="text-align: right;">금액 ↕</th>
+                <th>결제수단</th>
+                <th>메모</th>
+              </tr>
+            </thead>
+            <tbody id="transactions-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-bar">
+          <div class="page-info" id="page-info-label">
+            검색 결과: 0건 (1 / 1 페이지)
+          </div>
+          <div class="page-controls">
+            <button class="page-btn" id="btn-first-page" onclick="goToPage('first')">⏪ 처음</button>
+            <button class="page-btn" id="btn-prev-page" onclick="goToPage('prev')">◀ 이전</button>
+            <button class="page-btn" id="btn-next-page" onclick="goToPage('next')">다음 ▶</button>
+            <button class="page-btn" id="btn-last-page" onclick="goToPage('last')">끝 ⏩</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Embedded initial dataset from Python
+    const defaultDataset = __TRANSACTIONS_JSON__;
+    
+    // Application state variables
+    let rawTransactions = [...defaultDataset];
+    let filteredTransactions = [];
+    let currentPage = 1;
+    const itemsPerPage = 20;
+    
+    let sortBy = 'date';
+    let sortAsc = false; // Descending by default for dates
+    
+    // Globals for Chart.js instances to destroy before recreating
+    let chartMonthlyTrend = null;
+    let chartFuel = null;
+    let chartToll = null;
+    let chartCard = null;
+    let chartCategory = null;
+
+    // Rules
+    const FUEL_KEYWORDS = __FUEL_KEYWORDS_JSON__;
+    const TOLL_KEYWORDS = __TOLL_KEYWORDS_JSON__;
+    const TOLL_PAYMENT_METHOD = "__TOLL_PAYMENT_METHOD__";
+    const CARD_ISSUERS = __CARD_ISSUERS_JSON__;
+
+    // Init App
+    window.onload = function() {
+      initData();
+      initDragAndDrop();
+      
+      // Listen to file picker
+      document.getElementById('file-input').addEventListener('change', handleFileSelect);
+    };
+
+    function initData() {
+      calculateKPIs();
+      populateDropdownFilters();
+      applyFilters();
+      renderAllCharts();
+    }
+
+    function resetToDefaultData() {
+      rawTransactions = [...defaultDataset];
+      document.getElementById('file-input').value = '';
+      initData();
+    }
+
+    // Setup drag and drop for CSV
+    function initDragAndDrop() {
+      const dropZone = document.getElementById('drop-zone');
+      
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.display = 'block';
+        dropZone.classList.add('dragover');
+      });
+      
+      dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropZone.style.display = 'none';
+        dropZone.classList.remove('dragover');
+      });
+      
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.display = 'none';
+        dropZone.classList.remove('dragover');
+        
+        if (e.dataTransfer.files.length > 0) {
+          const file = e.dataTransfer.files[0];
+          if (file.name.endsWith('.csv')) {
+            parseUploadedCSV(file);
+          } else {
+            alert('CSV 형식의 파일만 업로드할 수 있습니다.');
+          }
+        }
+      });
+
+      dropZone.addEventListener('click', () => {
+        document.getElementById('file-input').click();
+      });
+    }
+
+    function handleFileSelect(e) {
+      if (e.target.files.length > 0) {
+        parseUploadedCSV(e.target.files[0]);
+      }
+    }
+
+    function parseUploadedCSV(file) {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          const data = results.data;
+          if (data.length === 0) {
+            alert('CSV 데이터가 비어 있습니다.');
+            return;
+          }
+          
+          // Verify columns
+          const firstRow = data[0];
+          const hasRequired = ('날짜' in firstRow) && ('금액' in firstRow);
+          if (!hasRequired) {
+            alert('필수 열(날짜, 금액)이 누락되었습니다. 가계부 CSV를 확인해주세요.');
+            return;
+          }
+          
+          // Map to standard layout
+          rawTransactions = data.map(row => {
+            const amtStr = (row['금액'] || '0').replace(/,/g, '');
+            let amt = parseFloat(amtStr);
+            if (isNaN(amt)) amt = 0.0;
+            
+            return {
+              date: row['날짜'] || '',
+              time: row['시간'] || '',
+              type: row['타입'] || (amt < 0 ? '지출' : '수입'),
+              category: row['대분류'] || '미분류',
+              subcategory: row['소분류'] || '미분류',
+              content: row['내용'] || '',
+              amount: amt,
+              currency: row['화폐'] || 'KRW',
+              payment: row['결제수단'] || '',
+              memo: row['메모'] || ''
+            };
+          });
+          
+          rawTransactions.sort((a,b) => (b.date + b.time).localeCompare(a.date + a.time));
+          initData();
+        },
+        error: function(err) {
+          alert('CSV 파싱 중 오류가 발생했습니다: ' + err.message);
+        }
+      });
+    }
+
+    // Switch Tabs
+    function switchTab(tabId) {
+      // Update tab buttons
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      event.currentTarget.classList.add('active');
+      
+      // Update contents
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      document.getElementById('tab-' + tabId).classList.add('active');
+      
+      // Trigger chart resize/re-render
+      setTimeout(() => {
+        renderAllCharts();
+      }, 50);
+    }
+
+    // Formatter
+    function formatMoney(value) {
+      return Math.round(value).toLocaleString() + '원';
+    }
+
+    // KPI Calculations
+    function calculateKPIs() {
+      let income = 0;
+      let expense = 0;
+      
+      rawTransactions.forEach(t => {
+        if (t.type === '수입') {
+          income += t.amount;
+        } else if (t.type === '지출') {
+          expense += Math.abs(t.amount);
+        }
+      });
+      
+      const net = income - expense;
+      const savingsRate = income > 0 ? (net / income * 100) : 0;
+      
+      document.getElementById('kpi-income').innerText = formatMoney(income);
+      document.getElementById('kpi-expense').innerText = formatMoney(expense);
+      document.getElementById('kpi-net').innerText = formatMoney(net);
+      document.getElementById('kpi-savings').innerText = savingsRate.toFixed(1) + '%';
+      
+      // Style color for Net
+      const netCardVal = document.getElementById('kpi-net');
+      if (net >= 0) {
+        netCardVal.style.color = 'var(--theme-blue)';
+      } else {
+        netCardVal.style.color = 'var(--color-expense)';
+      }
+    }
+
+    // Dropdown population
+    function populateDropdownFilters() {
+      const cats = new Set(['ALL']);
+      const months = new Set(['ALL']);
+      const payments = new Set(['ALL']);
+      
+      rawTransactions.forEach(t => {
+        if (t.category) cats.add(t.category);
+        if (t.date && t.date.length >= 7) months.add(t.date.substring(0, 7));
+        if (t.payment) payments.add(t.payment);
+      });
+      
+      // Populate Categories
+      const catSelect = document.getElementById('filter-category');
+      catSelect.innerHTML = '';
+      Array.from(cats).sort().forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.innerText = c === 'ALL' ? '전체 카테고리' : c;
+        catSelect.appendChild(opt);
+      });
+      
+      // Populate Months
+      const monthSelect = document.getElementById('filter-month');
+      monthSelect.innerHTML = '';
+      Array.from(months).sort().reverse().forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.innerText = m === 'ALL' ? '전체 기간' : m;
+        monthSelect.appendChild(opt);
+      });
+      
+      // Populate Payments
+      const paymentSelect = document.getElementById('filter-payment');
+      paymentSelect.innerHTML = '';
+      Array.from(payments).sort().forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.innerText = p === 'ALL' ? '전체 결제수단' : p;
+        paymentSelect.appendChild(opt);
+      });
+    }
+
+    // Filter Logic
+    function applyFilters() {
+      const searchVal = document.getElementById('filter-search').value.toLowerCase();
+      const typeVal = document.getElementById('filter-type').value;
+      const catVal = document.getElementById('filter-category').value;
+      const monthVal = document.getElementById('filter-month').value;
+      const paymentVal = document.getElementById('filter-payment').value;
+      
+      filteredTransactions = rawTransactions.filter(t => {
+        const matchSearch = t.content.toLowerCase().includes(searchVal) || t.memo.toLowerCase().includes(searchVal);
+        const matchType = typeVal === 'ALL' || t.type === typeVal;
+        const matchCat = catVal === 'ALL' || t.category === catVal;
+        const matchMonth = monthVal === 'ALL' || (t.date && t.date.startsWith(monthVal));
+        const matchPayment = paymentVal === 'ALL' || t.payment === paymentVal;
+        
+        return matchSearch && matchType && matchCat && matchMonth && matchPayment;
+      });
+      
+      // Sort
+      sortData();
+      
+      currentPage = 1;
+      renderTable();
+    }
+
+    // Sorting
+    function toggleSort(field) {
+      if (sortBy === field) {
+        sortAsc = !sortAsc;
+      } else {
+        sortBy = field;
+        sortAsc = true;
+      }
+      sortData();
+      renderTable();
+    }
+
+    function sortData() {
+      filteredTransactions.sort((a, b) => {
+        let valA = a[sortBy];
+        let valB = b[sortBy];
+        
+        if (sortBy === 'amount') {
+          valA = Math.abs(valA);
+          valB = Math.abs(valB);
+        }
+        
+        if (typeof valA === 'string') {
+          return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        } else {
+          return sortAsc ? valA - valB : valB - valA;
+        }
+      });
+    }
+
+    // Table renderer
+    function renderTable() {
+      const tbody = document.getElementById('transactions-body');
+      tbody.innerHTML = '';
+      
+      const totalItems = filteredTransactions.length;
+      const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+      
+      if (currentPage > totalPages) currentPage = totalPages;
+      
+      const startIdx = (currentPage - 1) * itemsPerPage;
+      const endIdx = Math.min(startIdx + itemsPerPage, totalItems);
+      
+      const pagedData = filteredTransactions.slice(startIdx, endIdx);
+      
+      pagedData.forEach(t => {
+        const tr = document.createElement('tr');
+        
+        const badgeClass = t.type === '수입' ? 'badge-income' : (t.type === '지출' ? 'badge-expense' : 'badge-transfer');
+        const amountClass = t.type === '수입' ? 'item-value income' : (t.type === '지출' ? 'item-value expense' : 'item-value');
+        
+        tr.innerHTML = `
+          <td>${t.date}</td>
+          <td style="color:var(--text-muted);">${t.time || '-'}</td>
+          <td><span class="badge ${badgeClass}">${t.type}</span></td>
+          <td><span class="badge badge-secondary">${t.category}</span></td>
+          <td style="color:var(--text-secondary);">${t.subcategory}</td>
+          <td style="font-weight:500;">${t.content}</td>
+          <td class="${amountClass}" style="text-align: right;">${formatMoney(t.amount)}</td>
+          <td style="color:var(--text-secondary);">${t.payment || '-'}</td>
+          <td style="color:var(--text-muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis;" title="${t.memo}">${t.memo || '-'}</td>
+        `;
+        
+        tbody.appendChild(tr);
+      });
+      
+      // Pagination label
+      document.getElementById('page-info-label').innerText = `검색 결과: ${totalItems.toLocaleString()}건 (${currentPage} / ${totalPages} 페이지)`;
+      
+      // Enable/disable page buttons
+      document.getElementById('btn-first-page').disabled = currentPage === 1;
+      document.getElementById('btn-prev-page').disabled = currentPage === 1;
+      document.getElementById('btn-next-page').disabled = currentPage === totalPages;
+      document.getElementById('btn-last-page').disabled = currentPage === totalPages;
+    }
+
+    function goToPage(dir) {
+      const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1;
+      if (dir === 'first') currentPage = 1;
+      else if (dir === 'prev' && currentPage > 1) currentPage--;
+      else if (dir === 'next' && currentPage < totalPages) currentPage++;
+      else if (dir === 'last') currentPage = totalPages;
+      
+      renderTable();
+    }
+
+    // Dynamic Chart rendering
+    function renderAllCharts() {
+      const monthlyData = aggregateMonthlyData();
+      
+      renderMonthlyTrendChart(monthlyData);
+      renderFuelChart(monthlyData);
+      renderTollChart(monthlyData);
+      renderCardChart(monthlyData);
+      renderCategoryChart();
+    }
+
+    // Aggregators for Charts
+    function aggregateMonthlyData() {
+      const months = {};
+      
+      rawTransactions.forEach(t => {
+        if (!t.date || t.date.length < 7) return;
+        const month = t.date.substring(0, 7);
+        if (!months[month]) {
+          months[month] = {
+            month: month,
+            income: 0.0,
+            expense: 0.0,
+            fuel: 0.0,
+            toll: 0.0,
+            hana: 0.0,
+            hyundai: 0.0,
+            samsung: 0.0,
+            card_total: 0.0
+          };
+        }
+        
+        const cost = Math.abs(t.amount);
+        
+        // Rule credit cards (applied to any transaction where amount is negative, regardless of type)
+        if (t.amount < 0) {
+          for (const key in CARD_ISSUERS) {
+            if (t.content.includes(key)) {
+              const issuer = CARD_ISSUERS[key];
+              if (issuer === '하나카드') months[month].hana += cost;
+              else if (issuer === '현대카드') months[month].hyundai += cost;
+              else if (issuer === '삼성카드') months[month].samsung += cost;
+              
+              months[month].card_total += cost;
+              break;
+            }
+          }
+        }
+
+        if (t.type === '수입') {
+          months[month].income += t.amount;
+        } else if (t.type === '지출') {
+          months[month].expense += cost;
+          
+          // Rule fuel
+          const isFuel = t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k));
+          if (isFuel) {
+            months[month].fuel += cost;
+          }
+          
+          // Rule toll
+          const isToll = !isFuel && (t.payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => t.content.includes(k)));
+          if (isToll) {
+            months[month].toll += cost;
+          }
+        }
+      });
+      
+      return Object.values(months).sort((a,b) => a.month.localeCompare(b.month));
+    }
+
+    // Chart 1: Monthly Trend (Overview)
+    function renderMonthlyTrendChart(data) {
+      const canvas = document.getElementById('chart-monthly-trend');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (chartMonthlyTrend) chartMonthlyTrend.destroy();
+      
+      const labels = data.map(d => d.month);
+      const incomes = data.map(d => d.income);
+      const expenses = data.map(d => d.expense);
+      
+      chartMonthlyTrend = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: '수입',
+              data: incomes,
+              backgroundColor: 'rgba(16, 185, 129, 0.65)',
+              borderColor: 'var(--theme-emerald)',
+              borderWidth: 1,
+              borderRadius: 6,
+            },
+            {
+              label: '지출',
+              data: expenses,
+              backgroundColor: 'rgba(239, 68, 68, 0.65)',
+              borderColor: 'var(--color-expense)',
+              borderWidth: 1,
+              borderRadius: 6,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { color: '#d1d5db', font: { family: 'Inter' } }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: '#9ca3af' }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#9ca3af' }
+            }
+          }
+        }
+      });
+      
+      // Render side list (rank of monthly expenses)
+      const listContainer = document.getElementById('list-monthly-expenses');
+      if (listContainer) {
+        listContainer.innerHTML = '';
+        const sortedByExp = [...data].sort((a, b) => b.expense - a.expense);
+        sortedByExp.forEach(d => {
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.innerHTML = `
+            <div class="item-meta">
+              <span class="item-title">${d.month}</span>
+              <span class="item-subtitle">수입: ${formatMoney(d.income)}</span>
+            </div>
+            <div class="item-val-container">
+              <div class="item-value expense">${formatMoney(d.expense)}</div>
+            </div>
+          `;
+          listContainer.appendChild(item);
+        });
+      }
+    }
+
+    // Chart 2: Fuel
+    function renderFuelChart(data) {
+      const canvas = document.getElementById('chart-fuel');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (chartFuel) chartFuel.destroy();
+      
+      const labels = data.map(d => d.month);
+      const fuelCosts = data.map(d => d.fuel);
+      
+      chartFuel = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '주유비 지출',
+            data: fuelCosts,
+            backgroundColor: 'rgba(99, 102, 241, 0.6)',
+            borderColor: 'var(--theme-indigo)',
+            borderWidth: 1.5,
+            borderRadius: 6,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+            y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#9ca3af' } }
+          }
+        }
+      });
+
+      // Key stats
+      let total = 0;
+      let count = 0;
+      let peakVal = 0;
+      let peakMonth = '-';
+      
+      rawTransactions.forEach(t => {
+        if (t.type === '지출' && t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k))) {
+          total += Math.abs(t.amount);
+          count++;
+        }
+      });
+      
+      data.forEach(d => {
+        if (d.fuel > peakVal) {
+          peakVal = d.fuel;
+          peakMonth = d.month;
+        }
+      });
+      
+      const activeMonthsCount = data.filter(d => d.fuel > 0).length || 1;
+      
+      document.getElementById('fuel-total').innerText = formatMoney(total);
+      document.getElementById('fuel-count').innerText = count + '건';
+      document.getElementById('fuel-monthly-avg').innerText = formatMoney(total / activeMonthsCount);
+      document.getElementById('fuel-peak-month').innerText = peakMonth + ` (${formatMoney(peakVal)})`;
+
+      // Render recent fuel transactions
+      const detailsList = document.getElementById('list-fuel-details');
+      if (detailsList) {
+        detailsList.innerHTML = '';
+        const fuelTxs = rawTransactions.filter(t => t.type === '지출' && t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k))).slice(0, 10);
+        fuelTxs.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.style.padding = '8px 12px';
+          item.innerHTML = `
+            <div class="item-meta">
+              <span class="item-title" style="font-size:13px;">${t.content}</span>
+              <span class="item-subtitle" style="font-size:11px;">${t.date} | ${t.payment}</span>
+            </div>
+            <div class="item-val-container">
+              <div class="item-value expense" style="font-size:13px;">${formatMoney(t.amount)}</div>
+            </div>
+          `;
+          detailsList.appendChild(item);
+        });
+      }
+    }
+
+    // Chart 3: Toll
+    function renderTollChart(data) {
+      const canvas = document.getElementById('chart-toll');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (chartToll) chartToll.destroy();
+      
+      const labels = data.map(d => d.month);
+      const tollCosts = data.map(d => d.toll);
+      
+      chartToll = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '하이패스 통행료',
+            data: tollCosts,
+            backgroundColor: 'rgba(245, 158, 11, 0.65)',
+            borderColor: 'var(--theme-amber)',
+            borderWidth: 1.5,
+            borderRadius: 6,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+            y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#9ca3af' } }
+          }
+        }
+      });
+
+      // Stats
+      let total = 0;
+      let count = 0;
+      let peakVal = 0;
+      let peakMonth = '-';
+      
+      rawTransactions.forEach(t => {
+        const isFuel = t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k));
+        const isToll = !isFuel && (t.payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => t.content.includes(k)));
+        
+        if (t.type === '지출' && isToll) {
+          total += Math.abs(t.amount);
+          count++;
+        }
+      });
+      
+      data.forEach(d => {
+        if (d.toll > peakVal) {
+          peakVal = d.toll;
+          peakMonth = d.month;
+        }
+      });
+      
+      const activeMonthsCount = data.filter(d => d.toll > 0).length || 1;
+      
+      document.getElementById('toll-total').innerText = formatMoney(total);
+      document.getElementById('toll-count').innerText = count + '건';
+      document.getElementById('toll-monthly-avg').innerText = formatMoney(total / activeMonthsCount);
+      document.getElementById('toll-peak-month').innerText = peakMonth + ` (${formatMoney(peakVal)})`;
+
+      // Render recent toll transactions
+      const detailsList = document.getElementById('list-toll-details');
+      if (detailsList) {
+        detailsList.innerHTML = '';
+        const tollTxs = rawTransactions.filter(t => {
+          const isFuel = t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k));
+          return t.type === '지출' && !isFuel && (t.payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => t.content.includes(k)));
+        }).slice(0, 10);
+        
+        tollTxs.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.style.padding = '8px 12px';
+          item.innerHTML = `
+            <div class="item-meta">
+              <span class="item-title" style="font-size:13px;">${t.content}</span>
+              <span class="item-subtitle" style="font-size:11px;">${t.date} | ${t.payment}</span>
+            </div>
+            <div class="item-val-container">
+              <div class="item-value expense" style="font-size:13px;">${formatMoney(t.amount)}</div>
+            </div>
+          `;
+          detailsList.appendChild(item);
+        });
+      }
+    }
+
+    // Chart 4: Card Payments Stacked
+    function renderCardChart(data) {
+      const canvas = document.getElementById('chart-card');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (chartCard) chartCard.destroy();
+      
+      const labels = data.map(d => d.month);
+      const hana = data.map(d => d.hana);
+      const hyundai = data.map(d => d.hyundai);
+      const samsung = data.map(d => d.samsung);
+      
+      chartCard = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: '하나카드',
+              data: hana,
+              backgroundColor: 'rgba(16, 185, 129, 0.7)',
+              borderColor: 'rgba(16, 185, 129, 1)',
+              borderWidth: 1,
+            },
+            {
+              label: '현대카드',
+              data: hyundai,
+              backgroundColor: 'rgba(59, 130, 246, 0.7)',
+              borderColor: 'rgba(59, 130, 246, 1)',
+              borderWidth: 1,
+            },
+            {
+              label: '삼성카드',
+              data: samsung,
+              backgroundColor: 'rgba(239, 68, 68, 0.7)',
+              borderColor: 'rgba(239, 68, 68, 1)',
+              borderWidth: 1,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { color: '#d1d5db', font: { family: 'Inter' } }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: '#9ca3af' }, stacked: true },
+            y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#9ca3af' }, stacked: true }
+          }
+        }
+      });
+
+      // Stats
+      let total = 0;
+      let sumHana = 0;
+      let sumHyundai = 0;
+      let sumSamsung = 0;
+      
+      rawTransactions.forEach(t => {
+        if (t.amount < 0) {
+          const cost = Math.abs(t.amount);
+          for (const key in CARD_ISSUERS) {
+            if (t.content.includes(key)) {
+              const issuer = CARD_ISSUERS[key];
+              if (issuer === '하나카드') sumHana += cost;
+              else if (issuer === '현대카드') sumHyundai += cost;
+              else if (issuer === '삼성카드') sumSamsung += cost;
+              
+              total += cost;
+              break;
+            }
+          }
+        }
+      });
+      
+      document.getElementById('card-total').innerText = formatMoney(total);
+      document.getElementById('card-hana').innerText = formatMoney(sumHana);
+      document.getElementById('card-hyundai').innerText = formatMoney(sumHyundai);
+      document.getElementById('card-samsung').innerText = formatMoney(sumSamsung);
+
+      // Render recent card transactions
+      const detailsList = document.getElementById('list-card-details');
+      if (detailsList) {
+        detailsList.innerHTML = '';
+        const cardTxs = rawTransactions.filter(t => {
+          if (t.amount >= 0) return false;
+          return Object.keys(CARD_ISSUERS).some(key => t.content.includes(key));
+        }).slice(0, 10);
+        
+        cardTxs.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.style.padding = '8px 12px';
+          item.innerHTML = `
+            <div class="item-meta">
+              <span class="item-title" style="font-size:13px;">${t.content}</span>
+              <span class="item-subtitle" style="font-size:11px;">${t.date} | ${t.payment}</span>
+            </div>
+            <div class="item-val-container">
+              <div class="item-value expense" style="font-size:13px;">${formatMoney(t.amount)}</div>
+            </div>
+          `;
+          detailsList.appendChild(item);
+        });
+      }
+    }
+
+    // Chart 5: Category Doughnut Chart
+    function renderCategoryChart() {
+      const canvas = document.getElementById('chart-category');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (chartCategory) chartCategory.destroy();
+      
+      const categories = {};
+      let totalExpenses = 0;
+      
+      rawTransactions.forEach(t => {
+        if (t.type === '지출') {
+          const cost = Math.abs(t.amount);
+          const cat = t.category || '미분류';
+          categories[cat] = (categories[cat] || 0.0) + cost;
+          totalExpenses += cost;
+        }
+      });
+      
+      const sortedCats = Object.entries(categories).sort((a,b) => b[1] - a[1]);
+      const labels = sortedCats.map(c => c[0]);
+      const values = sortedCats.map(c => c[1]);
+      
+      chartCategory = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: [
+              'rgba(139, 92, 246, 0.7)',
+              'rgba(59, 130, 246, 0.7)',
+              'rgba(16, 185, 129, 0.7)',
+              'rgba(245, 158, 11, 0.7)',
+              'rgba(236, 72, 153, 0.7)',
+              'rgba(20, 184, 166, 0.7)',
+              'rgba(244, 63, 94, 0.7)',
+              'rgba(107, 114, 128, 0.7)'
+            ],
+            borderColor: 'var(--bg-secondary)',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#d1d5db', font: { family: 'Inter', size: 11 } }
+            }
+          },
+          cutout: '60%'
+        }
+      });
+
+      // Populate list on the right
+      const container = document.getElementById('list-category-breakdown');
+      if (container) {
+        container.innerHTML = '';
+        sortedCats.forEach(c => {
+          const percentage = totalExpenses > 0 ? (c[1] / totalExpenses * 100) : 0;
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.innerHTML = `
+            <div class="item-meta">
+              <span class="item-title">${c[0]}</span>
+              <span class="item-subtitle">${percentage.toFixed(1)}%</span>
+            </div>
+            <div class="item-val-container">
+              <div class="item-value expense">${formatMoney(c[1])}</div>
+            </div>
+          `;
+          container.appendChild(item);
+        });
+      }
+      
+      document.getElementById('category-detail-title').innerText = `총 지출 카테고리별 분할 (합계: ${formatMoney(totalExpenses)})`;
+    }
+  </script>
+
+</body>
+</html>
+"""
+
+    # Inject variables via simple string replacement
+    html_template = html_template.replace("__TRANSACTIONS_JSON__", tx_json)
+    html_template = html_template.replace("__FUEL_KEYWORDS_JSON__", fuel_kw_json)
+    html_template = html_template.replace("__TOLL_KEYWORDS_JSON__", toll_kw_json)
+    html_template = html_template.replace("__TOLL_PAYMENT_METHOD__", TOLL_PAYMENT_METHOD)
+    html_template = html_template.replace("__CARD_ISSUERS_JSON__", card_iss_json)
+
+    # Write to HTML output
+    OUT_PATH.write_text(html_template, encoding="utf-8")
+    print(f"Success: Generated interactive dashboard at {OUT_PATH}")
+
+if __name__ == "__main__":
+    main()

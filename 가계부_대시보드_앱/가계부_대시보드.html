@@ -650,9 +650,113 @@
         width: 100%;
       }
     }
+
+    /* Password Protection Overlay */
+    .password-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(11, 15, 25, 0.95);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      z-index: 9999;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+
+    .password-overlay.fade-out {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .password-card {
+      width: 90%;
+      max-width: 420px;
+      padding: 40px 32px;
+      background: rgba(17, 24, 39, 0.75);
+      border: 1px solid var(--border-glass-bright);
+      border-radius: 20px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      text-align: center;
+      animation: modalSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes modalSlideIn {
+      from { opacity: 0; transform: scale(0.95) translateY(10px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .password-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #a78bfa 0%, #3b82f6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .password-subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+
+    .password-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .password-input {
+      letter-spacing: 0.1em;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .password-error {
+      color: var(--color-expense);
+      font-size: 13px;
+      height: 18px;
+      margin-top: 8px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .password-error.visible {
+      opacity: 1;
+      animation: shake 0.3s ease-in-out;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-6px); }
+      75% { transform: translateX(6px); }
+    }
   </style>
 </head>
 <body>
+
+  <!-- Password Protection Screen -->
+  <div id="password-overlay" class="password-overlay" style="display: none;">
+    <div class="password-card" id="password-card">
+      <div class="password-title">🔒 가계부 대시보드 보호</div>
+      <div class="password-subtitle">비밀번호를 입력하세요<br><small style="color: var(--theme-amber); font-weight: 600;">(힌트 : 결혼기념일 8자리)</small></div>
+      <div class="password-input-group">
+        <input type="password" id="password-input" class="form-control password-input" placeholder="••••••••" maxlength="8" autofocus onkeydown="if(event.key==='Enter') verifyPassword()" />
+        <button class="btn btn-primary" style="justify-content: center; width: 100%;" onclick="verifyPassword()">대시보드 열기</button>
+      </div>
+      <div id="password-error" class="password-error">비밀번호가 올바르지 않습니다.</div>
+    </div>
+  </div>
 
   <div class="app-container">
     <header>
@@ -1010,12 +1114,56 @@
 
     // Init App
     window.onload = function() {
+      const authenticated = sessionStorage.getItem('ledger_authenticated');
+      const overlay = document.getElementById('password-overlay');
+      
+      if (authenticated === 'true') {
+        if (overlay) {
+          overlay.style.display = 'none';
+        }
+      } else {
+        if (overlay) {
+          overlay.style.display = 'flex';
+          const pwInput = document.getElementById('password-input');
+          if (pwInput) pwInput.focus();
+        }
+      }
+      
       initData();
       initDragAndDrop();
       
       // Listen to file picker
       document.getElementById('file-input').addEventListener('change', handleFileSelect);
     };
+
+    function verifyPassword() {
+      const pwInput = document.getElementById('password-input');
+      const errorDiv = document.getElementById('password-error');
+      const card = document.getElementById('password-card');
+      
+      if (!pwInput || !errorDiv || !card) return;
+      
+      const input = pwInput.value;
+      if (input === '20250405') {
+        sessionStorage.setItem('ledger_authenticated', 'true');
+        const overlay = document.getElementById('password-overlay');
+        if (overlay) {
+          overlay.classList.add('fade-out');
+          setTimeout(() => {
+            overlay.style.display = 'none';
+          }, 500);
+        }
+      } else {
+        errorDiv.classList.add('visible');
+        card.style.animation = 'none';
+        // reflow to trigger animation restart
+        void card.offsetWidth;
+        card.style.animation = 'shake 0.3s ease-in-out';
+        
+        pwInput.value = '';
+        pwInput.focus();
+      }
+    }
 
     function initData() {
       calculateKPIs();

@@ -322,6 +322,7 @@ def main():
     .kpi-card.expense::after { background: var(--color-expense); }
     .kpi-card.net::after { background: var(--theme-blue); }
     .kpi-card.savings::after { background: var(--theme-amber); }
+    .kpi-card.fixed-cost::after { background: var(--theme-pink); }
 
     .kpi-label {
       font-size: 13px;
@@ -853,6 +854,7 @@ def main():
       <button class="tab-btn" onclick="switchTab('card')">💳 신용카드 대금</button>
       <button class="tab-btn" onclick="switchTab('category')">🏷️ 카테고리 분석</button>
       <button class="tab-btn" onclick="switchTab('explorer')">🔎 전체거래 내역</button>
+      <button class="tab-btn" onclick="switchTab('fixed-vs-variable')">⚙️ 고정비/변동비</button>
     </nav>
 
     <!-- KPI Blocks -->
@@ -876,6 +878,11 @@ def main():
         <span class="kpi-label">저축률 (Savings Rate)</span>
         <span class="kpi-value" id="kpi-savings">0%</span>
         <span class="kpi-note" id="kpi-savings-note">순수입 / 총수입</span>
+      </div>
+      <div class="kpi-card card fixed-cost">
+        <span class="kpi-label">평균 월 고정비</span>
+        <span class="kpi-value" id="kpi-fixed-cost">0원</span>
+        <span class="kpi-note" id="kpi-fixed-cost-note">주거/통신 + 구독 요금</span>
       </div>
     </div>
 
@@ -1149,6 +1156,51 @@ def main():
       </div>
     </div>
 
+    <!-- Tab 7: Fixed vs Variable -->
+    <div id="tab-fixed-vs-variable" class="tab-content">
+      <div class="dashboard-grid">
+        <div class="card">
+          <div class="section-title">
+            <span>월별 고정비 / 변동비 소비 추이</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-fixed-variable-trend"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title">
+            <span>고정비 / 변동비 비율 (전체 기간)</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-fixed-variable-ratio"></canvas>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card" style="margin-top: 24px;">
+        <div class="section-title">
+          <span>고정비로 분류된 주요 지출 내역 (최근 30건)</span>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>대분류</th>
+                <th>내용</th>
+                <th style="text-align: right;">금액</th>
+                <th>결제수단</th>
+                <th>메모</th>
+              </tr>
+            </thead>
+            <tbody id="fixed-expenses-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -1180,6 +1232,8 @@ def main():
     let chartToll = null;
     let chartCard = null;
     let chartCategory = null;
+    let chartFixedVariableTrend = null;
+    let chartFixedVariableRatio = null;
 
     // Rules
     const FUEL_KEYWORDS = __FUEL_KEYWORDS_JSON__;
@@ -1500,17 +1554,33 @@ def main():
         if (t.type === '수입') {
           income += t.amount;
         } else if (t.type === '지출') {
-          expense += (t.amount * -1);
+          const cost = t.amount * -1;
+          expense += cost;
+          
+          const isFixed = t.category === '주거/통신' || t.content.includes('와우멤버십') || t.content.includes('구독');
+          if (isFixed) {
+            totalFixed += cost;
+            if (t.date && t.date.length >= 7) {
+              fixedMonths.add(t.date.substring(0, 7));
+            }
+          }
         }
       });
       
       const net = income - expense;
       const savingsRate = income > 0 ? (net / income * 100) : 0;
+      const activeMonths = fixedMonths.size || 1;
+      const avgFixed = totalFixed / activeMonths;
       
       document.getElementById('kpi-income').innerText = formatMoney(income);
       document.getElementById('kpi-expense').innerText = formatMoney(expense);
       document.getElementById('kpi-net').innerText = formatMoney(net);
       document.getElementById('kpi-savings').innerText = savingsRate.toFixed(1) + '%';
+      
+      const kpiFixedEl = document.getElementById('kpi-fixed-cost');
+      if (kpiFixedEl) {
+        kpiFixedEl.innerText = formatMoney(avgFixed);
+      }
       
       // Style color for Net
       const netCardVal = document.getElementById('kpi-net');
@@ -1684,6 +1754,7 @@ def main():
       renderTollChart(monthlyData);
       renderCardChart(monthlyData);
       renderCategoryChart();
+      renderFixedVsVariableCharts(monthlyData);
     }
 
     // Aggregators for Charts
@@ -1703,7 +1774,9 @@ def main():
             hana: 0.0,
             hyundai: 0.0,
             samsung: 0.0,
-            card_total: 0.0
+            card_total: 0.0,
+            fixed: 0.0,
+            variable: 0.0
           };
         }
         
@@ -1726,6 +1799,14 @@ def main():
           months[month].income += t.amount;
         } else if (t.type === '지출') {
           months[month].expense += cost;
+          
+          // Rule fixed vs variable
+          const isFixed = t.category === '주거/통신' || t.content.includes('와우멤버십') || t.content.includes('구독');
+          if (isFixed) {
+            months[month].fixed += cost;
+          } else {
+            months[month].variable += cost;
+          }
           
           // Rule fuel
           const isFuel = t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k));
@@ -2188,6 +2269,122 @@ def main():
       }
       
       document.getElementById('category-detail-title').innerText = `총 지출 카테고리별 분할 (합계: ${formatMoney(totalExpenses)})`;
+    }
+
+    function renderFixedVsVariableCharts(data) {
+      // 1. Stacked Bar Chart for Monthly Trend
+      const canvasTrend = document.getElementById('chart-fixed-variable-trend');
+      if (canvasTrend) {
+        const ctx = canvasTrend.getContext('2d');
+        if (chartFixedVariableTrend) chartFixedVariableTrend.destroy();
+        
+        const labels = data.map(d => d.month);
+        const fixedVals = data.map(d => d.fixed);
+        const variableVals = data.map(d => d.variable);
+        
+        chartFixedVariableTrend = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: '고정비 (Fixed)',
+                data: fixedVals,
+                backgroundColor: 'rgba(236, 72, 153, 0.75)', // theme-pink
+                borderColor: 'var(--theme-pink)',
+                borderWidth: 1,
+                borderRadius: 6
+              },
+              {
+                label: '변동비 (Variable)',
+                data: variableVals,
+                backgroundColor: 'rgba(99, 102, 241, 0.75)', // theme-indigo
+                borderColor: 'var(--theme-indigo)',
+                borderWidth: 1,
+                borderRadius: 6
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: '#d1d5db', font: { family: 'Inter', size: 12 } } }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#9ca3af' }, stacked: true },
+              y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#9ca3af' }, stacked: true }
+            }
+          }
+        });
+      }
+
+      // 2. Ratio Doughnut Chart (Total Period)
+      const canvasRatio = document.getElementById('chart-fixed-variable-ratio');
+      if (canvasRatio) {
+        const ctx = canvasRatio.getContext('2d');
+        if (chartFixedVariableRatio) chartFixedVariableRatio.destroy();
+        
+        let totalFixed = 0;
+        let totalVariable = 0;
+        
+        data.forEach(d => {
+          totalFixed += d.fixed;
+          totalVariable += d.variable;
+        });
+        
+        chartFixedVariableRatio = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['고정비', '변동비'],
+            datasets: [{
+              data: [totalFixed, totalVariable],
+              backgroundColor: ['rgba(236, 72, 153, 0.75)', 'rgba(99, 102, 241, 0.75)'],
+              borderColor: 'var(--bg-secondary)',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { color: '#d1d5db', font: { family: 'Inter', size: 12 } }
+              }
+            },
+            cutout: '60%'
+          }
+        });
+      }
+
+      // 3. Populate Fixed Expenses Table (Recent 30)
+      const tableBody = document.getElementById('fixed-expenses-body');
+      if (tableBody) {
+        tableBody.innerHTML = '';
+        const fixedTxs = rawTransactions.filter(t => {
+          if (t.type !== '지출') return false;
+          return t.category === '주거/통신' || t.content.includes('와우멤버십') || t.content.includes('구독');
+        }).slice(0, 30);
+        
+        if (fixedTxs.length === 0) {
+          tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 20px;">고정비로 분류된 내역이 없습니다.</td></tr>';
+          return;
+        }
+
+        fixedTxs.forEach(t => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${t.date}</td>
+            <td><span class="badge badge-secondary">${t.category}</span></td>
+            <td>${t.content}</td>
+            <td style="text-align: right; font-weight:600; color: #fda4af;">${formatMoney(t.amount * -1)}</td>
+            <td>${t.payment}</td>
+            <td style="color:var(--text-secondary);">${t.memo || '-'}</td>
+          `;
+          tableBody.appendChild(row);
+        });
+      }
     }
   </script>
 

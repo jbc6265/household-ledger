@@ -66,7 +66,7 @@ def main():
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>가계부 인텔리전트 대시보드</title>
+  <title>성은이와 병철이의 가계부</title>
   <!-- Google Fonts: Inter & Outfit & Noto Sans KR -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -826,7 +826,7 @@ def main():
   <div class="app-container">
     <header>
       <div class="logo-container">
-        <span class="logo-title">가계부 인텔리전트 대시보드</span>
+        <span class="logo-title">성은이와 병철이의 가계부</span>
         <span class="logo-subtitle">월별 분석, 지출 탐색 및 자동차/카드대금 감사 대시보드</span>
       </div>
       <div class="header-actions">

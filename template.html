@@ -1178,7 +1178,22 @@
     let rawTransactions = [];
     
     function filterOutExcludedPayments(txs) {
-      return txs.filter(t => (t.payment || '') !== '프렌즈 체크카드_MC_후불교통_춘식이페어');
+      return txs.filter(t => {
+        const payment = t.payment || '';
+        const content = t.content || '';
+        
+        // 1. Exclude 춘식이페어
+        if (payment === '프렌즈 체크카드_MC_후불교통_춘식이페어') {
+          return false;
+        }
+        
+        // 2. Exclude Tesla vehicle deposit and cancellation records to balance out 0
+        if (content.includes('테슬라') && content.includes('계약금')) {
+          return false;
+        }
+        
+        return true;
+      });
     }
 
     const savedTxs = localStorage.getItem('ledger_uploaded_transactions');
@@ -1603,7 +1618,7 @@
         if (t.type === '수입') {
           income += t.amount;
         } else if (t.type === '지출') {
-          const cost = Math.abs(t.amount);
+          const cost = t.amount * -1;
           expense += cost;
           
           const isFixed = checkIsFixed(category, content);
@@ -1835,7 +1850,7 @@
           };
         }
         
-        const cost = Math.abs(t.amount);
+        const cost = t.amount * -1;
         const content = t.content || '';
         const category = t.category || '';
         const payment = t.payment || '';
@@ -2266,7 +2281,7 @@
       
       dataSet.forEach(t => {
         if (t.type === '지출') {
-          const cost = Math.abs(t.amount);
+          const cost = t.amount * -1;
           const cat = t.category || '미분류';
           categories[cat] = (categories[cat] || 0.0) + cost;
           totalExpenses += cost;
@@ -2397,7 +2412,7 @@
         
         dataSet.forEach(t => {
           if (t.type === '지출') {
-            const cost = Math.abs(t.amount);
+            const cost = t.amount * -1;
             const content = t.content || '';
             const category = t.category || '';
             const isFixed = checkIsFixed(category, content);
@@ -2456,7 +2471,7 @@
             <td>${t.date || ''}</td>
             <td><span class="badge badge-secondary">${t.category || ''}</span></td>
             <td>${t.content || ''}</td>
-            <td style="text-align: right; font-weight:600; color: #fda4af;">${formatMoney(Math.abs(t.amount))}</td>
+            <td style="text-align: right; font-weight:600; color: #fda4af;">${formatMoney(t.amount * -1)}</td>
             <td>${t.payment || ''}</td>
             <td style="color:var(--text-secondary);">${t.memo || '-'}</td>
           `;
@@ -2538,7 +2553,7 @@
         const content = t.content || '';
         const category = t.category || '';
         if (t.type === '지출' && checkIsFuel(category, content)) {
-          total += Math.abs(t.amount);
+          total += (t.amount * -1);
           count++;
         }
       });
@@ -2596,7 +2611,7 @@
         const isToll = !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
         
         if (t.type === '지출' && isToll) {
-          total += Math.abs(t.amount);
+          total += (t.amount * -1);
           count++;
         }
       });
@@ -2657,7 +2672,7 @@
       let sumSaemaul = 0;
       
       dataSet.forEach(t => {
-        const cost = Math.abs(t.amount);
+        const cost = t.amount * -1;
         const issuer = getCardIssuer(t.payment, t.content);
         if (issuer) {
           if (issuer === '하나카드') sumHana += cost;

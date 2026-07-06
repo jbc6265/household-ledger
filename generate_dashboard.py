@@ -1500,7 +1500,7 @@ def main():
         if (t.type === '수입') {
           income += t.amount;
         } else if (t.type === '지출') {
-          expense += Math.abs(t.amount);
+          expense += (t.amount * -1);
         }
       });
       
@@ -1707,20 +1707,18 @@ def main():
           };
         }
         
-        const cost = Math.abs(t.amount);
+        const cost = t.amount * -1;
         
-        // Rule credit cards (applied to any transaction where amount is negative, regardless of type)
-        if (t.amount < 0) {
-          for (const key in CARD_ISSUERS) {
-            if (t.content.includes(key)) {
-              const issuer = CARD_ISSUERS[key];
-              if (issuer === '하나카드') months[month].hana += cost;
-              else if (issuer === '현대카드') months[month].hyundai += cost;
-              else if (issuer === '삼성카드') months[month].samsung += cost;
-              
-              months[month].card_total += cost;
-              break;
-            }
+        // Rule credit cards (applied to card variants)
+        for (const key in CARD_ISSUERS) {
+          if (t.content.includes(key)) {
+            const issuer = CARD_ISSUERS[key];
+            if (issuer === '하나카드') months[month].hana += cost;
+            else if (issuer === '현대카드') months[month].hyundai += cost;
+            else if (issuer === '삼성카드') months[month].samsung += cost;
+            
+            months[month].card_total += cost;
+            break;
           }
         }
 
@@ -1868,7 +1866,7 @@ def main():
       
       rawTransactions.forEach(t => {
         if (t.type === '지출' && t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k))) {
-          total += Math.abs(t.amount);
+          total += (t.amount * -1);
           count++;
         }
       });
@@ -1957,7 +1955,7 @@ def main():
         const isToll = !isFuel && (t.payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => t.content.includes(k)));
         
         if (t.type === '지출' && isToll) {
-          total += Math.abs(t.amount);
+          total += (t.amount * -1);
           count++;
         }
       });
@@ -2066,18 +2064,16 @@ def main():
       let sumSamsung = 0;
       
       rawTransactions.forEach(t => {
-        if (t.amount < 0) {
-          const cost = Math.abs(t.amount);
-          for (const key in CARD_ISSUERS) {
-            if (t.content.includes(key)) {
-              const issuer = CARD_ISSUERS[key];
-              if (issuer === '하나카드') sumHana += cost;
-              else if (issuer === '현대카드') sumHyundai += cost;
-              else if (issuer === '삼성카드') sumSamsung += cost;
-              
-              total += cost;
-              break;
-            }
+        const cost = t.amount * -1;
+        for (const key in CARD_ISSUERS) {
+          if (t.content.includes(key)) {
+            const issuer = CARD_ISSUERS[key];
+            if (issuer === '하나카드') sumHana += cost;
+            else if (issuer === '현대카드') sumHyundai += cost;
+            else if (issuer === '삼성카드') sumSamsung += cost;
+            
+            total += cost;
+            break;
           }
         }
       });
@@ -2126,7 +2122,7 @@ def main():
       
       rawTransactions.forEach(t => {
         if (t.type === '지출') {
-          const cost = Math.abs(t.amount);
+          const cost = t.amount * -1;
           const cat = t.category || '미분류';
           categories[cat] = (categories[cat] || 0.0) + cost;
           totalExpenses += cost;

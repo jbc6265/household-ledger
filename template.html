@@ -233,8 +233,8 @@
     /* KPI Grid Layout */
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 16px;
       margin-bottom: 30px;
     }
 
@@ -243,6 +243,7 @@
       flex-direction: column;
       position: relative;
       overflow: hidden;
+      white-space: nowrap;
     }
 
     .kpi-card::after {
@@ -267,18 +268,21 @@
       font-weight: 500;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      white-space: nowrap;
     }
 
     .kpi-value {
       font-family: var(--font-display);
-      font-size: 28px;
+      font-size: 24px; /* 5개 카드 배열 시 안정적인 시각적 폭 유지 */
       font-weight: 700;
       margin: 12px 0 4px 0;
+      white-space: nowrap;
     }
 
     .kpi-note {
       font-size: 12px;
       color: var(--text-muted);
+      white-space: nowrap;
     }
 
     /* Main Content Sections */

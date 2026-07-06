@@ -1645,7 +1645,9 @@ def main():
       const paymentVal = document.getElementById('filter-payment').value;
       
       filteredTransactions = rawTransactions.filter(t => {
-        const matchSearch = t.content.toLowerCase().includes(searchVal) || t.memo.toLowerCase().includes(searchVal);
+        const content = (t.content || '').toLowerCase();
+        const memo = (t.memo || '').toLowerCase();
+        const matchSearch = content.includes(searchVal) || memo.includes(searchVal);
         const matchType = typeVal === 'ALL' || t.type === typeVal;
         const matchCat = catVal === 'ALL' || t.category === catVal;
         const matchMonth = monthVal === 'ALL' || (t.date && t.date.startsWith(monthVal));
@@ -1713,15 +1715,15 @@ def main():
         const amountClass = t.type === '수입' ? 'item-value income' : (t.type === '지출' ? 'item-value expense' : 'item-value');
         
         tr.innerHTML = `
-          <td>${t.date}</td>
+          <td>${t.date || ''}</td>
           <td style="color:var(--text-muted);">${t.time || '-'}</td>
-          <td><span class="badge ${badgeClass}">${t.type}</span></td>
-          <td><span class="badge badge-secondary">${t.category}</span></td>
-          <td style="color:var(--text-secondary);">${t.subcategory}</td>
-          <td style="font-weight:500;">${t.content}</td>
-          <td class="${amountClass}" style="text-align: right;">${formatMoney(t.amount)}</td>
+          <td><span class="badge ${badgeClass}">${t.type || ''}</span></td>
+          <td><span class="badge badge-secondary">${t.category || ''}</span></td>
+          <td style="color:var(--text-secondary);">${t.subcategory || ''}</td>
+          <td style="font-weight:500;">${t.content || ''}</td>
+          <td class="${amountClass}" style="text-align: right;">${formatMoney(t.amount || 0)}</td>
           <td style="color:var(--text-secondary);">${t.payment || '-'}</td>
-          <td style="color:var(--text-muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis;" title="${t.memo}">${t.memo || '-'}</td>
+          <td style="color:var(--text-muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis;" title="${t.memo || ''}">${t.memo || '-'}</td>
         `;
         
         tbody.appendChild(tr);

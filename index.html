@@ -13,6 +13,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- PapaParse CDN for Dynamic CSV Parsing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <!-- SheetJS (xlsx) CDN for Excel Parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <style>
     :root {
@@ -766,9 +768,9 @@
       </div>
       <div class="header-actions">
         <label for="file-input" class="btn btn-secondary">
-          <span class="upload-icon-small">📁</span> CSV 파일 업로드
+          <span class="upload-icon-small">📁</span> 가계부 파일 업로드 (.csv, .xlsx)
         </label>
-        <input type="file" id="file-input" accept=".csv" />
+        <input type="file" id="file-input" accept=".csv, .xlsx" />
         <button class="btn btn-primary" onclick="resetToDefaultData()">🔄 기본 데이터 복원</button>
       </div>
     </header>
@@ -1212,10 +1214,13 @@
         
         if (e.dataTransfer.files.length > 0) {
           const file = e.dataTransfer.files[0];
-          if (file.name.endsWith('.csv')) {
+          const filename = file.name.toLowerCase();
+          if (filename.endsWith('.csv')) {
             parseUploadedCSV(file);
+          } else if (filename.endsWith('.xlsx')) {
+            parseUploadedExcel(file);
           } else {
-            alert('CSV 형식의 파일만 업로드할 수 있습니다.');
+            alert('CSV 또는 Excel(.xlsx) 형식의 파일만 업로드할 수 있습니다.');
           }
         }
       });
@@ -1227,8 +1232,126 @@
 
     function handleFileSelect(e) {
       if (e.target.files.length > 0) {
-        parseUploadedCSV(e.target.files[0]);
+        const file = e.target.files[0];
+        const filename = file.name.toLowerCase();
+        if (filename.endsWith('.csv')) {
+          parseUploadedCSV(file);
+        } else if (filename.endsWith('.xlsx')) {
+          parseUploadedExcel(file);
+        } else {
+          alert('CSV 또는 Excel(.xlsx) 형식의 파일만 업로드할 수 있습니다.');
+        }
       }
+    }
+
+    function parseUploadedExcel(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true, cellNF: false, cellText: false });
+          
+          let sheetName = "가계부 내역";
+          if (!workbook.SheetNames.includes(sheetName)) {
+            sheetName = workbook.SheetNames[0];
+          }
+          
+          const worksheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+          
+          if (rows.length === 0) {
+            alert('엑셀 파일에 데이터가 없습니다.');
+            return;
+          }
+          
+          const headers = rows[0];
+          const colIndex = {};
+          headers.forEach((h, idx) => {
+            if (h) colIndex[h.toString().trim()] = idx;
+          });
+          
+          if (colIndex['날짜'] === undefined || colIndex['금액'] === undefined) {
+            alert('필수 열(날짜, 금액)이 누락되었습니다. 엑셀의 열 이름을 확인해주세요.');
+            return;
+          }
+          
+          function formatDate(val) {
+            if (val instanceof Date) {
+              const y = val.getFullYear();
+              const m = String(val.getMonth() + 1).padStart(2, '0');
+              const d = String(val.getDate()).padStart(2, '0');
+              return `${y}-${m}-${d}`;
+            }
+            if (typeof val === 'string') {
+              const clean = val.replaceAll('/', '-').trim();
+              if (clean.length >= 10) return clean.substring(0, 10);
+            }
+            return String(val || '');
+          }
+
+          function formatTime(val) {
+            if (val instanceof Date) {
+              const h = String(val.getHours()).padStart(2, '0');
+              const m = String(val.getMinutes()).padStart(2, '0');
+              const s = String(val.getSeconds()).padStart(2, '0');
+              return `${h}:${m}:${s}`;
+            }
+            if (typeof val === 'string') {
+              return val.trim();
+            }
+            return String(val || '');
+          }
+
+          function parseExcelAmount(val) {
+            if (typeof val === 'number') return val;
+            const amtStr = String(val || '0').replace(/,/g, '').trim();
+            let amt = parseFloat(amtStr);
+            return isNaN(amt) ? 0.0 : amt;
+          }
+
+          const parsedData = [];
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (row.length === 0 || row.every(cell => cell === "")) continue;
+            
+            const getValue = (colName, defaultVal = "") => {
+              const idx = colIndex[colName];
+              if (idx !== undefined && idx < row.length) {
+                const val = row[idx];
+                return val !== null && val !== undefined ? val : defaultVal;
+              }
+              return defaultVal;
+            };
+
+            const amt = parseExcelAmount(getValue('금액', 0));
+            parsedData.push({
+              date: formatDate(getValue('날짜')),
+              time: formatTime(getValue('시간')),
+              type: String(getValue('타입', amt < 0 ? '지출' : '수입')),
+              category: String(getValue('대분류', '미분류')),
+              subcategory: String(getValue('소분류', '미분류')),
+              content: String(getValue('내용')),
+              amount: amt,
+              currency: String(getValue('화폐', 'KRW')),
+              payment: String(getValue('결제수단')),
+              memo: String(getValue('메모'))
+            });
+          }
+
+          if (parsedData.length === 0) {
+            alert('가져올 가계부 거래 데이터가 없습니다.');
+            return;
+          }
+
+          rawTransactions = parsedData;
+          rawTransactions.sort((a,b) => (b.date + b.time).localeCompare(a.date + a.time));
+          localStorage.setItem('ledger_uploaded_transactions', JSON.stringify(rawTransactions));
+          initData();
+        } catch (err) {
+          alert('엑셀 파싱 도중 에러가 발생했습니다: ' + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
     }
 
     function parseUploadedCSV(file) {

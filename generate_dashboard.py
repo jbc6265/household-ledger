@@ -1551,13 +1551,15 @@ def main():
       let expense = 0;
       
       rawTransactions.forEach(t => {
+        const content = t.content || '';
+        const category = t.category || '';
         if (t.type === '수입') {
           income += t.amount;
         } else if (t.type === '지출') {
           const cost = t.amount * -1;
           expense += cost;
           
-          const isFixed = t.category === '주거/통신' || t.content.includes('와우멤버십') || t.content.includes('구독');
+          const isFixed = category === '주거/통신' || content.includes('와우멤버십') || content.includes('구독');
           if (isFixed) {
             totalFixed += cost;
             if (t.date && t.date.length >= 7) {
@@ -1781,10 +1783,13 @@ def main():
         }
         
         const cost = t.amount * -1;
+        const content = t.content || '';
+        const category = t.category || '';
+        const payment = t.payment || '';
         
         // Rule credit cards (applied to card variants)
         for (const key in CARD_ISSUERS) {
-          if (t.content.includes(key)) {
+          if (content.includes(key)) {
             const issuer = CARD_ISSUERS[key];
             if (issuer === '하나카드') months[month].hana += cost;
             else if (issuer === '현대카드') months[month].hyundai += cost;
@@ -1801,7 +1806,7 @@ def main():
           months[month].expense += cost;
           
           // Rule fixed vs variable
-          const isFixed = t.category === '주거/통신' || t.content.includes('와우멤버십') || t.content.includes('구독');
+          const isFixed = category === '주거/통신' || content.includes('와우멤버십') || content.includes('구독');
           if (isFixed) {
             months[month].fixed += cost;
           } else {
@@ -1809,13 +1814,13 @@ def main():
           }
           
           // Rule fuel
-          const isFuel = t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k));
+          const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
           if (isFuel) {
             months[month].fuel += cost;
           }
           
           // Rule toll
-          const isToll = !isFuel && (t.payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => t.content.includes(k)));
+          const isToll = !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
           if (isToll) {
             months[month].toll += cost;
           }
@@ -1946,7 +1951,9 @@ def main():
       let peakMonth = '-';
       
       rawTransactions.forEach(t => {
-        if (t.type === '지출' && t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k))) {
+        const content = t.content || '';
+        const category = t.category || '';
+        if (t.type === '지출' && category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k))) {
           total += (t.amount * -1);
           count++;
         }
@@ -1970,15 +1977,19 @@ def main():
       const detailsList = document.getElementById('list-fuel-details');
       if (detailsList) {
         detailsList.innerHTML = '';
-        const fuelTxs = rawTransactions.filter(t => t.type === '지출' && t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k))).slice(0, 10);
+        const fuelTxs = rawTransactions.filter(t => {
+          const content = t.content || '';
+          const category = t.category || '';
+          return t.type === '지출' && category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+        }).slice(0, 10);
         fuelTxs.forEach(t => {
           const item = document.createElement('div');
           item.className = 'list-item';
           item.style.padding = '8px 12px';
           item.innerHTML = `
             <div class="item-meta">
-              <span class="item-title" style="font-size:13px;">${t.content}</span>
-              <span class="item-subtitle" style="font-size:11px;">${t.date} | ${t.payment}</span>
+              <span class="item-title" style="font-size:13px;">${t.content || ''}</span>
+              <span class="item-subtitle" style="font-size:11px;">${t.date || ''} | ${t.payment || ''}</span>
             </div>
             <div class="item-val-container">
               <div class="item-value expense" style="font-size:13px;">${formatMoney(t.amount)}</div>
@@ -2032,8 +2043,11 @@ def main():
       let peakMonth = '-';
       
       rawTransactions.forEach(t => {
-        const isFuel = t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k));
-        const isToll = !isFuel && (t.payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => t.content.includes(k)));
+        const content = t.content || '';
+        const category = t.category || '';
+        const payment = t.payment || '';
+        const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+        const isToll = !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
         
         if (t.type === '지출' && isToll) {
           total += (t.amount * -1);
@@ -2060,8 +2074,11 @@ def main():
       if (detailsList) {
         detailsList.innerHTML = '';
         const tollTxs = rawTransactions.filter(t => {
-          const isFuel = t.category === '자동차' && FUEL_KEYWORDS.some(k => t.content.includes(k));
-          return t.type === '지출' && !isFuel && (t.payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => t.content.includes(k)));
+          const content = t.content || '';
+          const category = t.category || '';
+          const payment = t.payment || '';
+          const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+          return t.type === '지출' && !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
         }).slice(0, 10);
         
         tollTxs.forEach(t => {
@@ -2070,8 +2087,8 @@ def main():
           item.style.padding = '8px 12px';
           item.innerHTML = `
             <div class="item-meta">
-              <span class="item-title" style="font-size:13px;">${t.content}</span>
-              <span class="item-subtitle" style="font-size:11px;">${t.date} | ${t.payment}</span>
+              <span class="item-title" style="font-size:13px;">${t.content || ''}</span>
+              <span class="item-subtitle" style="font-size:11px;">${t.date || ''} | ${t.payment || ''}</span>
             </div>
             <div class="item-val-container">
               <div class="item-value expense" style="font-size:13px;">${formatMoney(t.amount)}</div>
@@ -2146,8 +2163,9 @@ def main():
       
       rawTransactions.forEach(t => {
         const cost = t.amount * -1;
+        const content = t.content || '';
         for (const key in CARD_ISSUERS) {
-          if (t.content.includes(key)) {
+          if (content.includes(key)) {
             const issuer = CARD_ISSUERS[key];
             if (issuer === '하나카드') sumHana += cost;
             else if (issuer === '현대카드') sumHyundai += cost;
@@ -2170,7 +2188,8 @@ def main():
         detailsList.innerHTML = '';
         const cardTxs = rawTransactions.filter(t => {
           if (t.amount >= 0) return false;
-          return Object.keys(CARD_ISSUERS).some(key => t.content.includes(key));
+          const content = t.content || '';
+          return Object.keys(CARD_ISSUERS).some(key => content.includes(key));
         }).slice(0, 10);
         
         cardTxs.forEach(t => {
@@ -2364,7 +2383,9 @@ def main():
         tableBody.innerHTML = '';
         const fixedTxs = rawTransactions.filter(t => {
           if (t.type !== '지출') return false;
-          return t.category === '주거/통신' || t.content.includes('와우멤버십') || t.content.includes('구독');
+          const content = t.content || '';
+          const category = t.category || '';
+          return category === '주거/통신' || content.includes('와우멤버십') || content.includes('구독');
         }).slice(0, 30);
         
         if (fixedTxs.length === 0) {
@@ -2375,11 +2396,11 @@ def main():
         fixedTxs.forEach(t => {
           const row = document.createElement('tr');
           row.innerHTML = `
-            <td>${t.date}</td>
-            <td><span class="badge badge-secondary">${t.category}</span></td>
-            <td>${t.content}</td>
+            <td>${t.date || ''}</td>
+            <td><span class="badge badge-secondary">${t.category || ''}</span></td>
+            <td>${t.content || ''}</td>
             <td style="text-align: right; font-weight:600; color: #fda4af;">${formatMoney(t.amount * -1)}</td>
-            <td>${t.payment}</td>
+            <td>${t.payment || ''}</td>
             <td style="color:var(--text-secondary);">${t.memo || '-'}</td>
           `;
           tableBody.appendChild(row);

@@ -1497,23 +1497,26 @@
       }, 50);
     }
 
+    // Centralized rules config
+    const LEDGER_RULES = {
+      fixedCostKeywords: ['와우멤버십', '구독', '흥화', '교보', '코웨이렌탈', 'Apple Inc'],
+      fixedCostCategories: ['주거/통신'],
+      fuelKeywords: ["주유소", "에너지", "오일뱅크", "석유", "주유"],
+      fixedCostExceptions: ['(주)동남에너지']
+    };
+
     // Helper function to check if a transaction is a fixed cost
     function checkIsFixed(category, content) {
       const cat = category || '';
       const txt = content || '';
       
-      // Exception: (주)동남에너지 is a fuel expense, should be variable cost
-      if (txt.includes('(주)동남에너지')) {
+      // Exception check
+      if (LEDGER_RULES.fixedCostExceptions.some(ex => txt.includes(ex))) {
         return false;
       }
       
-      if (cat === '주거/통신') return true;
-      if (txt.includes('와우멤버십')) return true;
-      if (txt.includes('구독')) return true;
-      if (txt.includes('흥화')) return true;
-      if (txt.includes('교보')) return true;
-      if (txt.includes('코웨이렌탈')) return true;
-      if (txt.includes('Apple Inc')) return true;
+      if (LEDGER_RULES.fixedCostCategories.includes(cat)) return true;
+      if (LEDGER_RULES.fixedCostKeywords.some(kw => txt.includes(kw))) return true;
       
       return false;
     }
@@ -1528,7 +1531,7 @@
         return true;
       }
       
-      if (cat === '자동차' && FUEL_KEYWORDS.some(k => txt.includes(k))) {
+      if (cat === '자동차' && LEDGER_RULES.fuelKeywords.some(k => txt.includes(k))) {
         return true;
       }
       

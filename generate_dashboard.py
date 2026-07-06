@@ -1596,6 +1596,8 @@ def main():
     function calculateKPIs() {
       let income = 0;
       let expense = 0;
+      let totalFixed = 0;
+      const fixedMonths = new Set();
       
       rawTransactions.forEach(t => {
         const content = t.content || '';

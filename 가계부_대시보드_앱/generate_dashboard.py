@@ -1154,7 +1154,17 @@ def main():
     const defaultDataset = __TRANSACTIONS_JSON__;
     
     // Application state variables
-    let rawTransactions = [...defaultDataset];
+    let rawTransactions = [];
+    const savedTxs = localStorage.getItem('ledger_uploaded_transactions');
+    if (savedTxs) {
+      try {
+        rawTransactions = JSON.parse(savedTxs);
+      } catch (e) {
+        rawTransactions = [...defaultDataset];
+      }
+    } else {
+      rawTransactions = [...defaultDataset];
+    }
     let filteredTransactions = [];
     let currentPage = 1;
     const itemsPerPage = 20;
@@ -1236,6 +1246,7 @@ def main():
     }
 
     function resetToDefaultData() {
+      localStorage.removeItem('ledger_uploaded_transactions');
       rawTransactions = [...defaultDataset];
       document.getElementById('file-input').value = '';
       initData();
@@ -1323,6 +1334,7 @@ def main():
           });
           
           rawTransactions.sort((a,b) => (b.date + b.time).localeCompare(a.date + a.time));
+          localStorage.setItem('ledger_uploaded_transactions', JSON.stringify(rawTransactions));
           initData();
         },
         error: function(err) {

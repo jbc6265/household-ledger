@@ -1607,6 +1607,44 @@ def main():
       }, 50);
     }
 
+    // Helper function to check if a transaction is a fixed cost
+    function checkIsFixed(category, content) {
+      const cat = category || '';
+      const txt = content || '';
+      
+      // Exception: (주)동남에너지 is a fuel expense, should be variable cost
+      if (txt.includes('(주)동남에너지')) {
+        return false;
+      }
+      
+      if (cat === '주거/통신') return true;
+      if (txt.includes('와우멤버십')) return true;
+      if (txt.includes('구독')) return true;
+      if (txt.includes('흥화')) return true;
+      if (txt.includes('교보')) return true;
+      if (txt.includes('코웨이렌탈')) return true;
+      if (txt.includes('Apple Inc')) return true;
+      
+      return false;
+    }
+
+    // Helper function to check if a transaction is a fuel cost
+    function checkIsFuel(category, content) {
+      const cat = category || '';
+      const txt = content || '';
+      
+      // Exception: (주)동남에너지 is dynamically mapped as fuel
+      if (txt.includes('(주)동남에너지')) {
+        return true;
+      }
+      
+      if (cat === '자동차' && FUEL_KEYWORDS.some(k => txt.includes(k))) {
+        return true;
+      }
+      
+      return false;
+    }
+
     // Formatter
     function formatMoney(value) {
       return Math.round(value).toLocaleString() + '원';
@@ -1629,7 +1667,7 @@ def main():
           const cost = t.amount * -1;
           expense += cost;
           
-          const isFixed = category === '주거/통신' || content.includes('와우멤버십') || content.includes('구독');
+          const isFixed = checkIsFixed(category, content);
           if (isFixed) {
             totalFixed += cost;
             if (t.date && t.date.length >= 7) {
@@ -1880,7 +1918,7 @@ def main():
           months[month].expense += cost;
           
           // Rule fixed vs variable
-          const isFixed = category === '주거/통신' || content.includes('와우멤버십') || content.includes('구독');
+          const isFixed = checkIsFixed(category, content);
           if (isFixed) {
             months[month].fixed += cost;
           } else {
@@ -1888,7 +1926,7 @@ def main():
           }
           
           // Rule fuel
-          const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+          const isFuel = checkIsFuel(category, content);
           if (isFuel) {
             months[month].fuel += cost;
           }
@@ -2120,7 +2158,7 @@ def main():
         const content = t.content || '';
         const category = t.category || '';
         const payment = t.payment || '';
-        const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+        const isFuel = checkIsFuel(category, content);
         const isToll = !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
         
         if (t.type === '지출' && isToll) {
@@ -2151,7 +2189,7 @@ def main():
           const content = t.content || '';
           const category = t.category || '';
           const payment = t.payment || '';
-          const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+          const isFuel = checkIsFuel(category, content);
           return t.type === '지출' && !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
         }).slice(0, 10);
         
@@ -2431,7 +2469,7 @@ def main():
             const cost = t.amount * -1;
             const content = t.content || '';
             const category = t.category || '';
-            const isFixed = category === '주거/통신' || content.includes('와우멤버십') || content.includes('구독');
+            const isFixed = checkIsFixed(category, content);
             if (isFixed) {
               totalFixed += cost;
             } else {
@@ -2473,7 +2511,7 @@ def main():
           if (t.type !== '지출') return false;
           const content = t.content || '';
           const category = t.category || '';
-          return category === '주거/통신' || content.includes('와우멤버십') || content.includes('구독');
+          return checkIsFixed(category, content);
         }).slice(0, 30);
         
         if (fixedTxs.length === 0) {
@@ -2568,7 +2606,7 @@ def main():
       dataSet.forEach(t => {
         const content = t.content || '';
         const category = t.category || '';
-        if (t.type === '지출' && category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k))) {
+        if (t.type === '지출' && checkIsFuel(category, content)) {
           total += (t.amount * -1);
           count++;
         }
@@ -2578,7 +2616,7 @@ def main():
       dataSet.forEach(t => {
         const content = t.content || '';
         const category = t.category || '';
-        if (t.type === '지출' && category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k))) {
+        if (t.type === '지출' && checkIsFuel(category, content)) {
           if (t.date && t.date.length >= 7) months.add(t.date.substring(0, 7));
         }
       });
@@ -2594,7 +2632,7 @@ def main():
         const fuelTxs = dataSet.filter(t => {
           const content = t.content || '';
           const category = t.category || '';
-          return t.type === '지출' && category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+          return t.type === '지출' && checkIsFuel(category, content);
         }).slice(0, 10);
         fuelTxs.forEach(t => {
           const item = document.createElement('div');
@@ -2623,7 +2661,7 @@ def main():
         const content = t.content || '';
         const category = t.category || '';
         const payment = t.payment || '';
-        const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+        const isFuel = checkIsFuel(category, content);
         const isToll = !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
         
         if (t.type === '지출' && isToll) {
@@ -2637,7 +2675,7 @@ def main():
         const content = t.content || '';
         const category = t.category || '';
         const payment = t.payment || '';
-        const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+        const isFuel = checkIsFuel(category, content);
         const isToll = !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
         if (t.type === '지출' && isToll) {
           if (t.date && t.date.length >= 7) months.add(t.date.substring(0, 7));
@@ -2656,7 +2694,7 @@ def main():
           const content = t.content || '';
           const category = t.category || '';
           const payment = t.payment || '';
-          const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+          const isFuel = checkIsFuel(category, content);
           return t.type === '지출' && !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
         }).slice(0, 10);
         

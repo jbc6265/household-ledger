@@ -904,6 +904,24 @@ def main():
       <button class="tab-btn" onclick="switchTab('fixed-vs-variable')">⚙️ 고정비/변동비</button>
     </nav>
 
+    <!-- Global Date Filter Panel -->
+    <div class="card" style="margin-bottom: 24px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border: 1px solid var(--border-glass-bright); background: rgba(17, 24, 39, 0.4); backdrop-filter: blur(10px);">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 15px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+          📅 분석 조회 기간 설정
+        </span>
+        <span style="font-size: 11px; color: var(--text-secondary);">
+          (요약 통계 및 비율 차트에만 실시간 적용되며, 역사적 월별 추이 막대그래프는 영향을 받지 않고 고정됩니다)
+        </span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <select id="global-start-month" class="form-control" style="width: 140px; padding: 6px 12px; font-size:14px; background: var(--bg-secondary); border: 1px solid var(--border-glass); color: var(--text-primary);" onchange="applyGlobalDateFilter()"></select>
+        <span style="color: var(--text-secondary); font-size: 14px;">부터</span>
+        <select id="global-end-month" class="form-control" style="width: 140px; padding: 6px 12px; font-size:14px; background: var(--bg-secondary); border: 1px solid var(--border-glass); color: var(--text-primary);" onchange="applyGlobalDateFilter()"></select>
+        <span style="color: var(--text-secondary); font-size: 14px;">까지</span>
+      </div>
+    </div>
+
     <!-- KPI Blocks -->
     <div class="kpi-grid">
       <div class="kpi-card card income">
@@ -1281,6 +1299,7 @@ def main():
     let chartCategory = null;
     let chartFixedVariableTrend = null;
     let chartFixedVariableRatio = null;
+    let dateFilteredTransactions = [];
 
     // Rules
     const FUEL_KEYWORDS = __FUEL_KEYWORDS_JSON__;
@@ -1342,7 +1361,8 @@ def main():
     }
 
     function initData() {
-      calculateKPIs();
+      populateGlobalDateFilters();
+      applyGlobalDateFilter();
       populateDropdownFilters();
       applyFilters();
       renderAllCharts();
@@ -1593,13 +1613,14 @@ def main():
     }
 
     // KPI Calculations
-    function calculateKPIs() {
+    function calculateKPIs(txs) {
+      const dataSet = txs || rawTransactions;
       let income = 0;
       let expense = 0;
       let totalFixed = 0;
       const fixedMonths = new Set();
       
-      rawTransactions.forEach(t => {
+      dataSet.forEach(t => {
         const content = t.content || '';
         const category = t.category || '';
         if (t.type === '수입') {
@@ -1806,8 +1827,10 @@ def main():
       renderFuelChart(monthlyData);
       renderTollChart(monthlyData);
       renderCardChart(monthlyData);
-      renderCategoryChart();
       renderFixedVsVariableCharts(monthlyData);
+      
+      // Trigger dynamic filter rendering for doughnut charts and stats
+      applyGlobalDateFilter();
     }
 
     // Aggregators for Charts
@@ -2262,16 +2285,17 @@ def main():
     }
 
     // Chart 5: Category Doughnut Chart
-    function renderCategoryChart() {
+    function renderCategoryChart(txs) {
       const canvas = document.getElementById('chart-category');
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       if (chartCategory) chartCategory.destroy();
       
+      const dataSet = txs || rawTransactions;
       const categories = {};
       let totalExpenses = 0;
       
-      rawTransactions.forEach(t => {
+      dataSet.forEach(t => {
         if (t.type === '지출') {
           const cost = t.amount * -1;
           const cat = t.category || '미분류';
@@ -2388,8 +2412,12 @@ def main():
           }
         });
       }
+    }
 
-      // 2. Ratio Doughnut Chart (Total Period)
+    function renderFixedVsVariableRatioAndTable(txs) {
+      const dataSet = txs || rawTransactions;
+      
+      // 1. Ratio Doughnut Chart
       const canvasRatio = document.getElementById('chart-fixed-variable-ratio');
       if (canvasRatio) {
         const ctx = canvasRatio.getContext('2d');
@@ -2398,9 +2426,18 @@ def main():
         let totalFixed = 0;
         let totalVariable = 0;
         
-        data.forEach(d => {
-          totalFixed += d.fixed;
-          totalVariable += d.variable;
+        dataSet.forEach(t => {
+          if (t.type === '지출') {
+            const cost = t.amount * -1;
+            const content = t.content || '';
+            const category = t.category || '';
+            const isFixed = category === '주거/통신' || content.includes('와우멤버십') || content.includes('구독');
+            if (isFixed) {
+              totalFixed += cost;
+            } else {
+              totalVariable += cost;
+            }
+          }
         });
         
         chartFixedVariableRatio = new Chart(ctx, {
@@ -2428,11 +2465,11 @@ def main():
         });
       }
 
-      // 3. Populate Fixed Expenses Table (Recent 30)
+      // 2. Fixed Expenses Table (Recent 30)
       const tableBody = document.getElementById('fixed-expenses-body');
       if (tableBody) {
         tableBody.innerHTML = '';
-        const fixedTxs = rawTransactions.filter(t => {
+        const fixedTxs = dataSet.filter(t => {
           if (t.type !== '지출') return false;
           const content = t.content || '';
           const category = t.category || '';
@@ -2455,6 +2492,243 @@ def main():
             <td style="color:var(--text-secondary);">${t.memo || '-'}</td>
           `;
           tableBody.appendChild(row);
+        });
+      }
+    }
+
+    // Dynamic global date filter populators and logic
+    function populateGlobalDateFilters() {
+      const months = new Set();
+      rawTransactions.forEach(t => {
+        if (t.date && t.date.length >= 7) {
+          months.add(t.date.substring(0, 7));
+        }
+      });
+      const sortedMonths = Array.from(months).sort();
+      
+      const startSelect = document.getElementById('global-start-month');
+      const endSelect = document.getElementById('global-end-month');
+      if (!startSelect || !endSelect) return;
+      
+      startSelect.innerHTML = '';
+      endSelect.innerHTML = '';
+      
+      sortedMonths.forEach(m => {
+        const optStart = document.createElement('option');
+        optStart.value = m;
+        optStart.innerText = m;
+        startSelect.appendChild(optStart);
+        
+        const optEnd = document.createElement('option');
+        optEnd.value = m;
+        optEnd.innerText = m;
+        endSelect.appendChild(optEnd);
+      });
+      
+      if (sortedMonths.length > 0) {
+        startSelect.value = sortedMonths[0];
+        endSelect.value = sortedMonths[sortedMonths.length - 1];
+      }
+    }
+
+    function applyGlobalDateFilter() {
+      const startSelect = document.getElementById('global-start-month');
+      const endSelect = document.getElementById('global-end-month');
+      if (!startSelect || !endSelect) {
+        dateFilteredTransactions = [...rawTransactions];
+        return;
+      }
+      
+      const start = startSelect.value;
+      const end = endSelect.value;
+      
+      if (!start || !end) {
+        dateFilteredTransactions = [...rawTransactions];
+      } else {
+        dateFilteredTransactions = rawTransactions.filter(t => {
+          if (!t.date || t.date.length < 7) return false;
+          const m = t.date.substring(0, 7);
+          return m >= start && m <= end;
+        });
+      }
+      
+      calculateKPIs(dateFilteredTransactions);
+      renderCategoryChart(dateFilteredTransactions);
+      renderFixedVsVariableRatioAndTable(dateFilteredTransactions);
+      updateFuelStats(dateFilteredTransactions);
+      updateTollStats(dateFilteredTransactions);
+      updateCardStats(dateFilteredTransactions);
+    }
+
+    function updateFuelStats(txs) {
+      const dataSet = txs || rawTransactions;
+      let total = 0;
+      let count = 0;
+      
+      dataSet.forEach(t => {
+        const content = t.content || '';
+        const category = t.category || '';
+        if (t.type === '지출' && category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k))) {
+          total += (t.amount * -1);
+          count++;
+        }
+      });
+      
+      const months = new Set();
+      dataSet.forEach(t => {
+        const content = t.content || '';
+        const category = t.category || '';
+        if (t.type === '지출' && category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k))) {
+          if (t.date && t.date.length >= 7) months.add(t.date.substring(0, 7));
+        }
+      });
+      const activeMonthsCount = months.size || 1;
+      
+      document.getElementById('fuel-total').innerText = formatMoney(total);
+      document.getElementById('fuel-count').innerText = count + '건';
+      document.getElementById('fuel-monthly-avg').innerText = formatMoney(total / activeMonthsCount);
+      
+      const detailsList = document.getElementById('list-fuel-details');
+      if (detailsList) {
+        detailsList.innerHTML = '';
+        const fuelTxs = dataSet.filter(t => {
+          const content = t.content || '';
+          const category = t.category || '';
+          return t.type === '지출' && category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+        }).slice(0, 10);
+        fuelTxs.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.style.padding = '8px 12px';
+          item.innerHTML = `
+            <div class="item-meta">
+              <span class="item-title" style="font-size:13px;">${t.content || ''}</span>
+              <span class="item-subtitle" style="font-size:11px;">${t.date || ''} | ${t.payment || ''}</span>
+            </div>
+            <div class="item-val-container">
+              <div class="item-value expense" style="font-size:13px;">${formatMoney(t.amount)}</div>
+            </div>
+          `;
+          detailsList.appendChild(item);
+        });
+      }
+    }
+
+    function updateTollStats(txs) {
+      const dataSet = txs || rawTransactions;
+      let total = 0;
+      let count = 0;
+      
+      dataSet.forEach(t => {
+        const content = t.content || '';
+        const category = t.category || '';
+        const payment = t.payment || '';
+        const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+        const isToll = !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
+        
+        if (t.type === '지출' && isToll) {
+          total += (t.amount * -1);
+          count++;
+        }
+      });
+      
+      const months = new Set();
+      dataSet.forEach(t => {
+        const content = t.content || '';
+        const category = t.category || '';
+        const payment = t.payment || '';
+        const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+        const isToll = !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
+        if (t.type === '지출' && isToll) {
+          if (t.date && t.date.length >= 7) months.add(t.date.substring(0, 7));
+        }
+      });
+      const activeMonthsCount = months.size || 1;
+      
+      document.getElementById('toll-total').innerText = formatMoney(total);
+      document.getElementById('toll-count').innerText = count + '건';
+      document.getElementById('toll-monthly-avg').innerText = formatMoney(total / activeMonthsCount);
+      
+      const detailsList = document.getElementById('list-toll-details');
+      if (detailsList) {
+        detailsList.innerHTML = '';
+        const tollTxs = dataSet.filter(t => {
+          const content = t.content || '';
+          const category = t.category || '';
+          const payment = t.payment || '';
+          const isFuel = category === '자동차' && FUEL_KEYWORDS.some(k => content.includes(k));
+          return t.type === '지출' && !isFuel && (payment === TOLL_PAYMENT_METHOD || TOLL_KEYWORDS.some(k => content.includes(k)));
+        }).slice(0, 10);
+        
+        tollTxs.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.style.padding = '8px 12px';
+          item.innerHTML = `
+            <div class="item-meta">
+              <span class="item-title" style="font-size:13px;">${t.content || ''}</span>
+              <span class="item-subtitle" style="font-size:11px;">${t.date || ''} | ${t.payment || ''}</span>
+            </div>
+            <div class="item-val-container">
+              <div class="item-value expense" style="font-size:13px;">${formatMoney(t.amount)}</div>
+            </div>
+          `;
+          detailsList.appendChild(item);
+        });
+      }
+    }
+
+    function updateCardStats(txs) {
+      const dataSet = txs || rawTransactions;
+      let total = 0;
+      let sumHana = 0;
+      let sumHyundai = 0;
+      let sumSamsung = 0;
+      
+      dataSet.forEach(t => {
+        const cost = t.amount * -1;
+        const content = t.content || '';
+        for (const key in CARD_ISSUERS) {
+          if (content.includes(key)) {
+            const issuer = CARD_ISSUERS[key];
+            if (issuer === '하나카드') sumHana += cost;
+            else if (issuer === '현대카드') sumHyundai += cost;
+            else if (issuer === '삼성카드') sumSamsung += cost;
+            
+            total += cost;
+            break;
+          }
+        }
+      });
+      
+      document.getElementById('card-total').innerText = formatMoney(total);
+      document.getElementById('card-hana').innerText = formatMoney(sumHana);
+      document.getElementById('card-hyundai').innerText = formatMoney(sumHyundai);
+      document.getElementById('card-samsung').innerText = formatMoney(sumSamsung);
+      
+      const detailsList = document.getElementById('list-card-details');
+      if (detailsList) {
+        detailsList.innerHTML = '';
+        const cardTxs = dataSet.filter(t => {
+          if (t.amount >= 0) return false;
+          const content = t.content || '';
+          return Object.keys(CARD_ISSUERS).some(key => content.includes(key));
+        }).slice(0, 10);
+        
+        cardTxs.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.style.padding = '8px 12px';
+          item.innerHTML = `
+            <div class="item-meta">
+              <span class="item-title" style="font-size:13px;">${t.content || ''}</span>
+              <span class="item-subtitle" style="font-size:11px;">${t.date || ''} | ${t.payment || ''}</span>
+            </div>
+            <div class="item-val-container">
+              <div class="item-value expense" style="font-size:13px;">${formatMoney(t.amount)}</div>
+            </div>
+          `;
+          detailsList.appendChild(item);
         });
       }
     }

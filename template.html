@@ -2736,10 +2736,14 @@
           }
         });
         
+        const total = totalFixed + totalVariable;
+        const fixedRate = total > 0 ? ((totalFixed / total) * 100).toFixed(1) : '0.0';
+        const variableRate = total > 0 ? ((totalVariable / total) * 100).toFixed(1) : '0.0';
+
         chartFixedVariableRatio = new Chart(ctx, {
           type: 'doughnut',
           data: {
-            labels: ['고정비', '변동비'],
+            labels: [`고정비 (${fixedRate}%)`, `변동비 (${variableRate}%)`],
             datasets: [{
               data: [totalFixed, totalVariable],
               backgroundColor: ['rgba(236, 72, 153, 0.75)', 'rgba(99, 102, 241, 0.75)'],
@@ -2756,8 +2760,37 @@
                 labels: { color: '#d1d5db', font: { family: 'Inter', size: 12 } }
               }
             },
-            cutout: '60%'
-          }
+            cutout: '70%'
+          },
+          plugins: [{
+            id: 'centerText',
+            beforeDraw(chart) {
+              const { ctx, width, height } = chart;
+              ctx.restore();
+              
+              const valFixed = chart.data.datasets[0].data[0];
+              const valVariable = chart.data.datasets[0].data[1];
+              const valTotal = valFixed + valVariable;
+              if (valTotal === 0) return;
+              
+              const pct = ((valFixed / valTotal) * 100).toFixed(1) + '%';
+              
+              ctx.font = 'bold 24px Outfit, Inter, sans-serif';
+              ctx.textBaseline = 'middle';
+              ctx.textAlign = 'center';
+              ctx.fillStyle = '#fff';
+              
+              const textX = width / 2;
+              const textY = height / 2 - 10;
+              ctx.fillText(pct, textX, textY);
+              
+              ctx.font = '500 11px Noto Sans KR, Inter, sans-serif';
+              ctx.fillStyle = '#9ca3af';
+              ctx.fillText('고정비 비율', textX, textY + 22);
+              
+              ctx.save();
+            }
+          }]
         });
       }
 

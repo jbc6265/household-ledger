@@ -1213,13 +1213,13 @@
     const SUPABASE_URL = 'https://gbvsuqarbsyrljjeljkc.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_58F1DfxyCWbkRHU41Cyuww_4S-26KgY';
     
-    let supabase = null;
+    let supabaseClient = null;
     let isOnlineDBMode = false;
     
     // Attempt initialization of Supabase client
     if (SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_URL.startsWith('__')) {
       try {
-        supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         isOnlineDBMode = true;
         console.log('Supabase Cloud DB가 성공적으로 설정되었습니다. 온라인 모드로 구동합니다.');
       } catch (e) {
@@ -1286,7 +1286,7 @@
         if (sbCard) sbCard.style.display = 'block';
         
         // Check active session
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await supabaseClient.auth.getSession();
         if (session) {
           if (overlay) overlay.style.display = 'none';
           showUserHeader(session.user.email);
@@ -1299,7 +1299,7 @@
         }
         
         // Listen for auth state updates
-        supabase.auth.onAuthStateChange(async (event, session) => {
+        supabaseClient.auth.onAuthStateChange(async (event, session) => {
           if (session) {
             if (overlay) overlay.style.display = 'none';
             showUserHeader(session.user.email);
@@ -1373,10 +1373,10 @@
       
       try {
         if (action === 'login') {
-          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
           if (error) throw error;
         } else if (action === 'signup') {
-          const { error } = await supabase.auth.signUp({ email, password });
+          const { error } = await supabaseClient.auth.signUp({ email, password });
           if (error) throw error;
           infoDiv.innerText = '인증 메일이 발송되었습니다. 메일 확인 후 로그인을 시도해 주세요. (가입 즉시 로그인이 가능하도록 설정되어 있는 경우 바로 로그인이 진행됩니다.)';
           infoDiv.style.display = 'block';
@@ -1389,7 +1389,7 @@
 
     async function handleSupabaseLogout() {
       if (isOnlineDBMode) {
-        const { error } = await supabase.auth.signOut();
+        const { error } = await supabaseClient.auth.signOut();
         if (error) alert('로그아웃 중 에러 발생: ' + error.message);
       }
     }
@@ -1416,7 +1416,7 @@
       if (!isOnlineDBMode) return;
       
       try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
           .from('transactions')
           .select('*')
           .order('date', { ascending: false })
@@ -1457,7 +1457,7 @@
       }
       
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } } = await supabaseClient.auth.getUser();
         if (!user) {
           alert('로그인 세션이 유효하지 않습니다. 다시 로그인해 주세요.');
           return;
@@ -1467,7 +1467,7 @@
         if (uploadBtn) uploadBtn.innerText = '⏳ 업로드 중...';
         
         // Remove existing items first
-        const { error: delErr } = await supabase
+        const { error: delErr } = await supabaseClient
           .from('transactions')
           .delete()
           .eq('user_id', user.id);
@@ -1490,7 +1490,7 @@
             memo: t.memo || ''
           }));
           
-          const { error: insErr } = await supabase
+          const { error: insErr } = await supabaseClient
             .from('transactions')
             .insert(chunk);
             
@@ -1547,10 +1547,10 @@
       if (confirm('모든 가계부 데이터를 초기 빌드된 기본 내역으로 복원하시겠습니까? (현재 업로드 및 수정된 내용은 모두 지워집니다.)')) {
         if (isOnlineDBMode) {
           try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const { data: { user } } = await supabaseClient.auth.getUser();
             if (!user) return;
             
-            const { error } = await supabase
+            const { error } = await supabaseClient
               .from('transactions')
               .delete()
               .eq('user_id', user.id);

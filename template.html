@@ -15,6 +15,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <!-- SheetJS (xlsx) CDN for Excel Parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
     :root {
@@ -752,16 +754,41 @@
 </head>
 <body>
 
-  <!-- Password Protection Screen -->
-  <div id="password-overlay" class="password-overlay" style="display: none;">
-    <div class="password-card" id="password-card">
-      <div class="password-title">🔒 가계부 대시보드 보호</div>
+  <!-- Password / Supabase Login Protection Screen -->
+  <div id="password-overlay" class="password-overlay" style="display: flex;">
+    <!-- Fallback Simple Password Card (Offline Mode) -->
+    <div class="password-card" id="password-card" style="display: none;">
+      <div class="password-title">🔒 가계부 대시보드 보호 (데모 모드)</div>
       <div class="password-subtitle">비밀번호를 입력하세요<br><small style="color: var(--theme-amber); font-weight: 600;">(힌트 : 결혼기념일 8자리)</small></div>
       <div class="password-input-group">
         <input type="password" id="password-input" class="form-control password-input" placeholder="••••••••" maxlength="8" autofocus onkeydown="if(event.key==='Enter') verifyPassword()" />
         <button class="btn btn-primary" style="justify-content: center; width: 100%;" onclick="verifyPassword()">대시보드 열기</button>
       </div>
       <div id="password-error" class="password-error">비밀번호가 올바르지 않습니다.</div>
+    </div>
+
+    <!-- Supabase Auth Card (Online DB Mode) -->
+    <div class="password-card" id="supabase-auth-card" style="display: none; max-width: 400px; width: 90%;">
+      <div class="password-title">🔒 Cloud DB 가계부 로그인</div>
+      <div class="password-subtitle">동기화 대시보드 접속을 위해 로그인해 주세요.</div>
+      
+      <div class="supabase-form" style="margin-top: 15px; text-align: left; display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <label style="font-size:12px; color:var(--text-secondary); margin-bottom:4px; display:block;">이메일 주소</label>
+          <input type="email" id="sb-email" class="form-control" placeholder="example@email.com" style="width:100%; border-radius: 6px; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: #fff;" />
+        </div>
+        <div>
+          <label style="font-size:12px; color:var(--text-secondary); margin-bottom:4px; display:block;">비밀번호</label>
+          <input type="password" id="sb-password" class="form-control" placeholder="••••••••" style="width:100%; border-radius: 6px; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-glass); color: #fff;" onkeydown="if(event.key==='Enter') handleSupabaseAuth('login')" />
+        </div>
+        <div id="sb-error" style="color: #ef4444; font-size:12px; display:none; margin-top:4px;"></div>
+        <div id="sb-info" style="color: #3b82f6; font-size:12px; display:none; margin-top:4px;"></div>
+        
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+          <button class="btn btn-primary" style="flex:1; justify-content:center;" onclick="handleSupabaseAuth('login')">로그인</button>
+          <button class="btn btn-secondary" style="flex:1; justify-content:center;" onclick="handleSupabaseAuth('signup')">회원가입</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -772,6 +799,8 @@
         <span class="logo-subtitle">월별 분석, 지출 탐색 및 자동차/카드대금 감사 대시보드</span>
       </div>
       <div class="header-actions">
+        <span id="user-status-text" style="font-size:12px; color:var(--text-secondary); margin-right:12px; display:none;"></span>
+        <button id="btn-logout" class="btn btn-secondary" style="display:none; margin-right:12px;" onclick="handleSupabaseLogout()">로그아웃</button>
         <label for="file-input" class="btn btn-secondary">
           <span class="upload-icon-small">📁</span> 가계부 파일 업로드 (.csv, .xlsx)
         </label>
@@ -1174,6 +1203,26 @@
     // Embedded initial dataset from Python
     const defaultDataset = __TRANSACTIONS_JSON__;
     
+    // Supabase Configuration (Replaced dynamically by Python builder)
+    const SUPABASE_URL = '__SUPABASE_URL__';
+    const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
+    
+    let supabase = null;
+    let isOnlineDBMode = false;
+    
+    // Attempt initialization of Supabase client
+    if (SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_URL.startsWith('__')) {
+      try {
+        supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        isOnlineDBMode = true;
+        console.log('Supabase Cloud DB가 성공적으로 설정되었습니다. 온라인 모드로 구동합니다.');
+      } catch (e) {
+        console.error('Supabase 클라이언트 초기화 에러. 데모 모드로 작동합니다:', e);
+      }
+    } else {
+      console.log('Supabase 설정 정보가 비어 있습니다. 로컬 데모 모드로 구동합니다.');
+    }
+    
     // Application state variables
     let rawTransactions = [];
     
@@ -1196,16 +1245,6 @@
       });
     }
 
-    const savedTxs = localStorage.getItem('ledger_uploaded_transactions');
-    if (savedTxs) {
-      try {
-        rawTransactions = filterOutExcludedPayments(JSON.parse(savedTxs));
-      } catch (e) {
-        rawTransactions = filterOutExcludedPayments([...defaultDataset]);
-      }
-    } else {
-      rawTransactions = filterOutExcludedPayments([...defaultDataset]);
-    }
     let filteredTransactions = [];
     let currentPage = 1;
     const itemsPerPage = 20;
@@ -1230,28 +1269,238 @@
     const CARD_ISSUERS = __CARD_ISSUERS_JSON__;
 
     // Init App
-    window.onload = function() {
-      const authenticated = sessionStorage.getItem('ledger_authenticated');
+    window.onload = async function() {
       const overlay = document.getElementById('password-overlay');
       
-      if (authenticated === 'true') {
-        if (overlay) {
-          overlay.style.display = 'none';
+      if (isOnlineDBMode) {
+        // Online Supabase Mode Setup
+        const fallbackCard = document.getElementById('password-card');
+        if (fallbackCard) fallbackCard.style.display = 'none';
+        const sbCard = document.getElementById('supabase-auth-card');
+        if (sbCard) sbCard.style.display = 'block';
+        
+        // Check active session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          if (overlay) overlay.style.display = 'none';
+          showUserHeader(session.user.email);
+          await syncDataFromDB();
+        } else {
+          if (overlay) overlay.style.display = 'flex';
+          // Load default dataset in background just to prevent chart crashes
+          rawTransactions = filterOutExcludedPayments([...defaultDataset]);
+          initData();
         }
+        
+        // Listen for auth state updates
+        supabase.auth.onAuthStateChange(async (event, session) => {
+          if (session) {
+            if (overlay) overlay.style.display = 'none';
+            showUserHeader(session.user.email);
+            await syncDataFromDB();
+          } else {
+            if (overlay) overlay.style.display = 'flex';
+            hideUserHeader();
+            rawTransactions = [];
+            initData();
+          }
+        });
       } else {
-        if (overlay) {
-          overlay.style.display = 'flex';
-          const pwInput = document.getElementById('password-input');
-          if (pwInput) pwInput.focus();
+        // Offline Fallback Demo Mode Setup
+        const fallbackCard = document.getElementById('password-card');
+        if (fallbackCard) fallbackCard.style.display = 'block';
+        const sbCard = document.getElementById('supabase-auth-card');
+        if (sbCard) sbCard.style.display = 'none';
+        
+        const authenticated = sessionStorage.getItem('ledger_authenticated');
+        if (authenticated === 'true') {
+          if (overlay) overlay.style.display = 'none';
+        } else {
+          if (overlay) {
+            overlay.style.display = 'flex';
+            const pwInput = document.getElementById('password-input');
+            if (pwInput) pwInput.focus();
+          }
         }
+        
+        // Load default offline backup data
+        const savedTxs = localStorage.getItem('ledger_uploaded_transactions');
+        if (savedTxs) {
+          try {
+            rawTransactions = filterOutExcludedPayments(JSON.parse(savedTxs));
+          } catch (e) {
+            rawTransactions = filterOutExcludedPayments([...defaultDataset]);
+          }
+        } else {
+          rawTransactions = filterOutExcludedPayments([...defaultDataset]);
+        }
+        
+        initData();
       }
       
-      initData();
       initDragAndDrop();
       
       // Listen to file picker
       document.getElementById('file-input').addEventListener('change', handleFileSelect);
     };
+
+    // Supabase Auth Handling
+    async function handleSupabaseAuth(action) {
+      const emailInput = document.getElementById('sb-email');
+      const pwInput = document.getElementById('sb-password');
+      const errDiv = document.getElementById('sb-error');
+      const infoDiv = document.getElementById('sb-info');
+      
+      if (!emailInput || !pwInput || !errDiv || !infoDiv) return;
+      
+      const email = emailInput.value.trim();
+      const password = pwInput.value.trim();
+      
+      errDiv.style.display = 'none';
+      infoDiv.style.display = 'none';
+      
+      if (!email || !password) {
+        errDiv.innerText = '이메일과 비밀번호를 모두 입력해 주세요.';
+        errDiv.style.display = 'block';
+        return;
+      }
+      
+      try {
+        if (action === 'login') {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+        } else if (action === 'signup') {
+          const { error } = await supabase.auth.signUp({ email, password });
+          if (error) throw error;
+          infoDiv.innerText = '인증 메일이 발송되었습니다. 메일 확인 후 로그인을 시도해 주세요. (가입 즉시 로그인이 가능하도록 설정되어 있는 경우 바로 로그인이 진행됩니다.)';
+          infoDiv.style.display = 'block';
+        }
+      } catch (err) {
+        errDiv.innerText = '오류: ' + err.message;
+        errDiv.style.display = 'block';
+      }
+    }
+
+    async function handleSupabaseLogout() {
+      if (isOnlineDBMode) {
+        const { error } = await supabase.auth.signOut();
+        if (error) alert('로그아웃 중 에러 발생: ' + error.message);
+      }
+    }
+
+    function showUserHeader(email) {
+      const statusText = document.getElementById('user-status-text');
+      const logoutBtn = document.getElementById('btn-logout');
+      if (statusText) {
+        statusText.innerText = `☁️ ${email} 연결됨`;
+        statusText.style.display = 'inline-block';
+      }
+      if (logoutBtn) logoutBtn.style.display = 'inline-block';
+    }
+
+    function hideUserHeader() {
+      const statusText = document.getElementById('user-status-text');
+      const logoutBtn = document.getElementById('btn-logout');
+      if (statusText) statusText.style.display = 'none';
+      if (logoutBtn) logoutBtn.style.display = 'none';
+    }
+
+    // Cloud DB Sync and Write
+    async function syncDataFromDB() {
+      if (!isOnlineDBMode) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('*')
+          .order('date', { ascending: false })
+          .order('time', { ascending: false });
+          
+        if (error) throw error;
+        
+        const formatted = (data || []).map(row => ({
+          date: row.date,
+          time: row.time,
+          type: row.type,
+          category: row.category,
+          subcategory: row.subcategory || '미분류',
+          content: row.content || '',
+          amount: parseFloat(row.amount),
+          payment: row.payment || '',
+          memo: row.memo || ''
+        }));
+        
+        rawTransactions = filterOutExcludedPayments(formatted);
+        initData();
+      } catch (err) {
+        console.error('DB fetch error:', err.message);
+        alert('DB 데이터를 수신하지 못했습니다: ' + err.message);
+      }
+    }
+
+    async function uploadDataToDB(parsedData) {
+      const targetData = filterOutExcludedPayments(parsedData);
+      
+      if (!isOnlineDBMode) {
+        // Offline Saving
+        rawTransactions = targetData;
+        rawTransactions.sort((a,b) => (b.date + b.time).localeCompare(a.date + a.time));
+        localStorage.setItem('ledger_uploaded_transactions', JSON.stringify(rawTransactions));
+        initData();
+        return;
+      }
+      
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          alert('로그인 세션이 유효하지 않습니다. 다시 로그인해 주세요.');
+          return;
+        }
+        
+        const uploadBtn = document.querySelector('label[for="file-input"]');
+        if (uploadBtn) uploadBtn.innerText = '⏳ 업로드 중...';
+        
+        // Remove existing items first
+        const { error: delErr } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('user_id', user.id);
+          
+        if (delErr) throw delErr;
+        
+        // Bulk batch upload (batch size of 1000)
+        const batchSize = 1000;
+        for (let i = 0; i < targetData.length; i += batchSize) {
+          const chunk = targetData.slice(i, i + batchSize).map(t => ({
+            user_id: user.id,
+            date: t.date,
+            time: t.time || '00:00:00',
+            type: t.type,
+            category: t.category,
+            subcategory: t.subcategory || '미분류',
+            content: t.content || '',
+            amount: parseFloat(t.amount),
+            payment: t.payment || '',
+            memo: t.memo || ''
+          }));
+          
+          const { error: insErr } = await supabase
+            .from('transactions')
+            .insert(chunk);
+            
+          if (insErr) throw insErr;
+        }
+        
+        if (uploadBtn) uploadBtn.innerHTML = '<span class="upload-icon-small">📁</span> 가계부 파일 업로드 (.csv, .xlsx)';
+        alert('데이터베이스 동기화 및 업로드가 성공적으로 완료되었습니다!');
+        await syncDataFromDB();
+        
+      } catch (err) {
+        alert('데이터베이스 업로드 오류: ' + err.message);
+        const uploadBtn = document.querySelector('label[for="file-input"]');
+        if (uploadBtn) uploadBtn.innerHTML = '<span class="upload-icon-small">📁</span> 가계부 파일 업로드 (.csv, .xlsx)';
+      }
+    }
 
     function verifyPassword() {
       const pwInput = document.getElementById('password-input');
@@ -1273,10 +1522,8 @@
       } else {
         errorDiv.classList.add('visible');
         card.style.animation = 'none';
-        // reflow to trigger animation restart
         void card.offsetWidth;
         card.style.animation = 'shake 0.3s ease-in-out';
-        
         pwInput.value = '';
         pwInput.focus();
       }
@@ -1290,11 +1537,30 @@
       renderAllCharts();
     }
 
-    function resetToDefaultData() {
-      localStorage.removeItem('ledger_uploaded_transactions');
-      rawTransactions = [...defaultDataset];
-      document.getElementById('file-input').value = '';
-      initData();
+    async function resetToDefaultData() {
+      if (confirm('모든 가계부 데이터를 초기 빌드된 기본 내역으로 복원하시겠습니까? (현재 업로드 및 수정된 내용은 모두 지워집니다.)')) {
+        if (isOnlineDBMode) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            
+            const { error } = await supabase
+              .from('transactions')
+              .delete()
+              .eq('user_id', user.id);
+            if (error) throw error;
+            
+            await uploadDataToDB(defaultDataset);
+          } catch (e) {
+            alert('초기화 중 오류 발생: ' + e.message);
+          }
+        } else {
+          localStorage.removeItem('ledger_uploaded_transactions');
+          rawTransactions = filterOutExcludedPayments([...defaultDataset]);
+          document.getElementById('file-input').value = '';
+          initData();
+        }
+      }
     }
 
     // Setup drag and drop for CSV
@@ -1352,7 +1618,7 @@
 
     function parseUploadedExcel(file) {
       const reader = new FileReader();
-      reader.onload = function(e) {
+      reader.onload = async function(e) {
         try {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: 'array', cellDates: true, cellNF: false, cellText: false });
@@ -1449,10 +1715,7 @@
             return;
           }
 
-          rawTransactions = filterOutExcludedPayments(parsedData);
-          rawTransactions.sort((a,b) => (b.date + b.time).localeCompare(a.date + a.time));
-          localStorage.setItem('ledger_uploaded_transactions', JSON.stringify(rawTransactions));
-          initData();
+          await uploadDataToDB(parsedData);
         } catch (err) {
           alert('엑셀 파싱 도중 에러가 발생했습니다: ' + err.message);
         }
@@ -1464,7 +1727,7 @@
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: function(results) {
+        complete: async function(results) {
           const data = results.data;
           if (data.length === 0) {
             alert('CSV 데이터가 비어 있습니다.');
@@ -1480,7 +1743,7 @@
           }
           
           // Map to standard layout
-          rawTransactions = data.map(row => {
+          const parsed = data.map(row => {
             const amtStr = (row['금액'] || '0').replace(/,/g, '');
             let amt = parseFloat(amtStr);
             if (isNaN(amt)) amt = 0.0;
@@ -1499,10 +1762,7 @@
             };
           });
           
-          rawTransactions = filterOutExcludedPayments(rawTransactions);
-          rawTransactions.sort((a,b) => (b.date + b.time).localeCompare(a.date + a.time));
-          localStorage.setItem('ledger_uploaded_transactions', JSON.stringify(rawTransactions));
-          initData();
+          await uploadDataToDB(parsed);
         },
         error: function(err) {
           alert('CSV 파싱 중 오류가 발생했습니다: ' + err.message);

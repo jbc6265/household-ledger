@@ -115,6 +115,11 @@ def main():
     html_content = TEMPLATE_PATH.read_text(encoding="utf-8")
 
     # Inject variables via string replacement
+    supabase_url = os.environ.get("SUPABASE_URL", "__SUPABASE_URL__")
+    supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY", "__SUPABASE_ANON_KEY__")
+
+    html_content = html_content.replace("__SUPABASE_URL__", supabase_url)
+    html_content = html_content.replace("__SUPABASE_ANON_KEY__", supabase_anon_key)
     html_content = html_content.replace("__TRANSACTIONS_JSON__", tx_json)
     html_content = html_content.replace("__FUEL_KEYWORDS_JSON__", fuel_kw_json)
     html_content = html_content.replace("__TOLL_KEYWORDS_JSON__", toll_kw_json)

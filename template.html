@@ -1438,6 +1438,19 @@
         }));
         
         rawTransactions = filterOutExcludedPayments(formatted);
+        
+        // Debugging display check
+        const statusText = document.getElementById('user-status-text');
+        if (statusText && rawTransactions.length > 0) {
+          const dates = rawTransactions.map(t => t.date).filter(Boolean).sort();
+          const minDate = dates[0] || 'N/A';
+          const maxDate = dates[dates.length - 1] || 'N/A';
+          // Extract email from existing string if present
+          const currentText = statusText.innerText;
+          const emailPart = currentText.replace('☁️', '').replace('연결됨', '').trim();
+          statusText.innerText = `☁️ ${emailPart} | DB: ${rawTransactions.length}건 (${minDate.substring(0,7)} ~ ${maxDate.substring(0,7)})`;
+        }
+        
         initData();
       } catch (err) {
         console.error('DB fetch error:', err.message);

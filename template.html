@@ -2718,14 +2718,13 @@
                     const pct = total > 0 ? ((val / total) * 100).toFixed(1) + '%' : '0.0%';
                     return `${label}: ${formatMoney(val)} (${pct})`;
                   },
-                  footer: function(tooltipItems) {
+                   footer: function(tooltipItems) {
                     const chart = tooltipItems[0].chart;
                     const idx = tooltipItems[0].dataIndex;
                     const fixedVal = chart.data.datasets[0].data[idx] || 0;
                     const variableVal = chart.data.datasets[1].data[idx] || 0;
                     const total = fixedVal + variableVal;
-                    const pct = total > 0 ? ((fixedVal / total) * 100).toFixed(1) + '%' : '0.0%';
-                    return `합계: ${formatMoney(total)}\n고정비 비율: ${pct}`;
+                    return `합계: ${formatMoney(total)}`;
                   }
                 }
               }

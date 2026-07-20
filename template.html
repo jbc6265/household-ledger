@@ -2698,9 +2698,15 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
             plugins: {
               legend: { labels: { color: '#d1d5db', font: { family: 'Inter', size: 12 } } },
               tooltip: {
+                mode: 'index',
+                intersect: false,
                 callbacks: {
                   label: function(context) {
                     const label = context.dataset.label || '';
@@ -2713,12 +2719,11 @@
                     return `${label}: ${formatMoney(val)} (${pct})`;
                   },
                   footer: function(tooltipItems) {
-                    let total = 0;
-                    tooltipItems.forEach(function(item) {
-                      total += item.raw || 0;
-                    });
                     const chart = tooltipItems[0].chart;
-                    const fixedVal = chart.data.datasets[0].data[tooltipItems[0].dataIndex] || 0;
+                    const idx = tooltipItems[0].dataIndex;
+                    const fixedVal = chart.data.datasets[0].data[idx] || 0;
+                    const variableVal = chart.data.datasets[1].data[idx] || 0;
+                    const total = fixedVal + variableVal;
                     const pct = total > 0 ? ((fixedVal / total) * 100).toFixed(1) + '%' : '0.0%';
                     return `합계: ${formatMoney(total)}\n고정비 비율: ${pct}`;
                   }

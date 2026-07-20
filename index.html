@@ -1041,6 +1041,12 @@
             </div>
           </div>
           <div class="section-title" style="margin-top:20px;">
+            <span>월별 카드 대금 합계</span>
+          </div>
+          <div class="data-list" id="list-monthly-card-totals" style="max-height: 180px; margin-bottom:20px;">
+            <!-- Dynamically populated -->
+          </div>
+          <div class="section-title" style="margin-top:20px;">
             <span>최근 카드 대금 내역</span>
           </div>
           <div class="data-list" id="list-card-details" style="max-height: 180px;">
@@ -2489,6 +2495,19 @@
             legend: {
               position: 'top',
               labels: { color: '#d1d5db', font: { family: 'Inter' } }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                footer: function(tooltipItems) {
+                  let sum = 0;
+                  tooltipItems.forEach(function(tooltipItem) {
+                    sum += tooltipItem.parsed.y;
+                  });
+                  return '합계: ' + Math.round(sum).toLocaleString() + '원';
+                }
+              }
             }
           },
           scales: {
@@ -2955,6 +2974,41 @@
       const saemaulEl = document.getElementById('card-saemaul');
       if (saemaulEl) saemaulEl.innerText = formatMoney(sumSaemaul);
       
+      // Calculate monthly card totals dynamically
+      const monthlyCardMap = {};
+      dataSet.forEach(t => {
+        const issuer = getCardIssuer(t.payment, t.content);
+        if (issuer) {
+          const month = t.date ? t.date.substring(0, 7) : '미분류';
+          const cost = t.amount * -1;
+          if (!monthlyCardMap[month]) {
+            monthlyCardMap[month] = 0;
+          }
+          monthlyCardMap[month] += cost;
+        }
+      });
+      
+      const monthlyTotalsList = document.getElementById('list-monthly-card-totals');
+      if (monthlyTotalsList) {
+        monthlyTotalsList.innerHTML = '';
+        const sortedMonths = Object.keys(monthlyCardMap).sort((a, b) => b.localeCompare(a));
+        sortedMonths.forEach(m => {
+          const val = monthlyCardMap[m];
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.style.padding = '8px 12px';
+          item.innerHTML = `
+            <div class="item-meta">
+              <span class="item-title" style="font-size:13px; font-weight: 500;">📅 ${m}</span>
+            </div>
+            <div class="item-val-container">
+              <div class="item-value expense" style="font-size:13px; font-weight: 600; color: #fca5a5;">${formatMoney(val)}</div>
+            </div>
+          `;
+          monthlyTotalsList.appendChild(item);
+        });
+      }
+
       const detailsList = document.getElementById('list-card-details');
       if (detailsList) {
         detailsList.innerHTML = '';

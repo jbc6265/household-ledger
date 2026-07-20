@@ -1416,16 +1416,35 @@
       if (!isOnlineDBMode) return;
       
       try {
-        const { data, error } = await supabaseClient
-          .from('transactions')
-          .select('*')
-          .order('date', { ascending: false })
-          .order('time', { ascending: false })
-          .limit(10000);
-          
-        if (error) throw error;
+        let allData = [];
+        let from = 0;
+        const size = 1000;
+        let hasMore = true;
         
-        const formatted = (data || []).map(row => ({
+        // Loop range fetch to bypass Supabase Max Rows (1000) backend settings limit
+        while (hasMore) {
+          const { data, error } = await supabaseClient
+            .from('transactions')
+            .select('*')
+            .order('date', { ascending: false })
+            .order('time', { ascending: false })
+            .range(from, from + size - 1);
+            
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            allData = allData.concat(data);
+            if (data.length < size) {
+              hasMore = false;
+            } else {
+              from += size;
+            }
+          } else {
+            hasMore = false;
+          }
+        }
+        
+        const formatted = allData.map(row => ({
           date: row.date,
           time: row.time,
           type: row.type,

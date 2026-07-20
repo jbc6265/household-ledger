@@ -1420,7 +1420,8 @@
           .from('transactions')
           .select('*')
           .order('date', { ascending: false })
-          .order('time', { ascending: false });
+          .order('time', { ascending: false })
+          .limit(10000);
           
         if (error) throw error;
         
